@@ -1,0 +1,53 @@
+.noDarg {
+  -webkit-app-region: no-drag;
+  flex: 5;
+}
+
+li {
+  color: rgb(255, 255, 255);
+  /* color: rgb(29, 129, 218); */
+}
+li {
+  height: 38px;
+  line-height: 38px;
+}
+
+li:hover {
+  /* background-color: rgba(158, 157, 157, 0.4); */
+}
+button {
+  color: rgb(136, 139, 143);
+  display: inline-block;
+  width: 100px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  /* margin: 0.6em 1.2em; */
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #4e4d4d00;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  /* border-color: #646cff; */
+  color: aliceblue;
+  /* color: rgb(29, 129, 218); */
+}
+button:focus,
+button:focus-visible {
+  /* outline: 4px auto -webkit-focus-ring-color; */
+}
+
+html,
+#app {
+  height: 100%;
+  overflow-y: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  /* height: 100%; */
+  height: calc(100%) !important;
+}

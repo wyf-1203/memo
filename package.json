@@ -1,0 +1,29 @@
+{
+  "name": "memo",
+  "private": true,
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "builder": "vite build && electron-builder --config electron-builder.json",
+    "preview": "vite preview",
+    "start": "nodemon --exec electron . --watch ./ --ext .js,.vue,.css,.html"
+  },
+  "dependencies": {
+    "element-plus": "^2.3.0",
+    "pinia": "^2.0.33",
+    "vue": "^3.2.45",
+    "vue-router": "^4.1.6"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.0.0",
+    "electron": "^23.1.2",
+    "electron-builder": "^23.6.0",
+    "electron-packager": "^17.1.1",
+    "nodemon": "^2.0.21",
+    "unplugin-auto-import": "^0.15.1",
+    "unplugin-vue-components": "^0.24.1",
+    "vite": "^4.1.0"
+  }
+}

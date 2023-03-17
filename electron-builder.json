@@ -1,0 +1,12 @@
+{
+  "files": ["main.js", "preload.js", "./dist"],
+  "productName": "桌面便签",
+  "directories": {
+    "buildResources": "assets",
+    "output": "dist_electron"
+  },
+  "extraResources": {
+    "from": "./dist/userData",
+    "to": "userData"
+  }
+}
