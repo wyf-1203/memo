@@ -8,5 +8,26 @@
   "extraResources": {
     "from": "./dist/userData",
     "to": "userData"
+  },
+  "nsis": {
+    "oneClick": false, // 是否一键安装
+    "allowElevation": true, // 允许请求提升。 如果为false，则用户必须使用提升的权限重新启动安装程序。
+    "allowToChangeInstallationDirectory": true, // 允许修改安装目录
+    "installerIcon": "./public/memo1.ico", // 安装图标
+    "uninstallerIcon": "./public/memo1.ico", //卸载图标
+    "installerHeaderIcon": "./public/memo1.ico", // 安装时头部图标
+    "createDesktopShortcut": true, // 创建桌面图标
+    "createStartMenuShortcut": true, // 创建开始菜单图标
+    "shortcutName": "桌面便签", // 图标名称
+    "runAfterFinish": true // 完成后是否运行已安装的应用程序（对于辅助安装程序，应删除相应的复选框）
+  },
+  "win": {
+    "icon": "./public/memo1.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["ia32"]
+      }
+    ]
   }
 }

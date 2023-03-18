@@ -9,6 +9,18 @@ const writeFile = async (arr) => {
   ipcRenderer.invoke('writeFile', arr);
   console.log(arr);
 };
+const minimize = () => {
+  ipcRenderer.invoke('minimize');
+};
+
+const overhead = (flag) => {
+  console.log(flag);
+  ipcRenderer.invoke('overhead', flag);
+};
+
+const Ignore = (flag) => {
+  ipcRenderer.invoke('Ignore', flag);
+};
 
 contextBridge.exposeInMainWorld('versions', {
   node: () => process.versions.node,
@@ -18,4 +30,7 @@ contextBridge.exposeInMainWorld('versions', {
 contextBridge.exposeInMainWorld('myApi', {
   loadData: loadData,
   writeFile: writeFile,
+  minimize: minimize,
+  overhead: overhead,
+  Ignore: Ignore,
 });

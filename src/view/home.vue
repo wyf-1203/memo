@@ -1,62 +1,146 @@
 <script setup>
-import { ref, reactive, watch } from 'vue';
-import router from '../router/index';
-import useUserDataStore from '../store/userDataStore';
-import { storeToRefs } from 'pinia';
-const btn = ref('TODO');
+import {
+  ref,
+  reactive,
+  watch,
+  computed,
+  onMounted,
+  onBeforeMount,
+  onUpdated,
+} from 'vue'
+import router from '../router/index'
+import useUserDataStore from '../store/userDataStore'
+import { storeToRefs } from 'pinia'
+const btn = ref('TODO')
 
-const radio1 = ref('TODO');
-const UserDataStore = useUserDataStore();
-const { userData } = storeToRefs(UserDataStore);
-const loadData = UserDataStore.loadData;
-loadData();
+const radio1 = ref('TODO')
+const UserDataStore = useUserDataStore()
+const { userData } = storeToRefs(UserDataStore)
+const loadData = UserDataStore.loadData
+loadData()
+let overheadFlag = ref(false)
+const minimize = () => {
+  window.myApi.minimize()
+}
+let nowTime = ref('0:00:00')
 
+const computedTime = () => {
+  setInterval(() => {
+    let time = new Date()
+    nowTime.value = timestampToTime(time)
+  }, 500)
+}
+computedTime()
+
+const timestampToTime = (timestamp) => {
+  // 时间戳为10位需*1000，时间戳为13位不需乘1000
+  // var date = new Date(timestamp * 1000);
+  // var date = new Date(timestamp)
+  var date = timestamp
+  // var Y = date.getFullYear() + '-'
+  // var M =
+  //   (date.getMonth() + 1 < 10
+  //     ? '0' + (date.getMonth() + 1)
+  //     : date.getMonth() + 1) + '-'
+  // var D = (date.getDate() < 10 ? '0' + date.getDate() : date.getDate()) + ' '
+  var h = date.getHours() + ':'
+  var m =
+    date.getMinutes() < 10
+      ? '0' + date.getMinutes() + ':'
+      : date.getMinutes() + ':'
+  var s = date.getSeconds() < 10 ? '0' + date.getSeconds() : date.getSeconds()
+  // return Y + M + D + h + m + s;
+  return h + m + s
+}
+
+const overhead = () => {
+  overheadFlag.value = !overheadFlag.value
+  if (overheadFlag.value) {
+    document.querySelector('body').style.backgroundColor =
+      'rgba(12, 12, 12, 0.405)'
+  } else {
+    document.querySelector('body').style.backgroundColor =
+      'rgba(12, 12, 12, 0.705)'
+  }
+  window.myApi.overhead(overheadFlag.value)
+}
+
+const mouseenter = () => {
+  if (overheadFlag.value) {
+    window.myApi.Ignore(false)
+  }
+}
+const mouseleave = () => {
+  if (overheadFlag.value) {
+    window.myApi.Ignore(true)
+  } else {
+    window.myApi.Ignore(false)
+  }
+}
+
+const clickHandle = (text) => {
+  btn.value = text
+  radio1.value = text
+}
 watch(radio1, (newValue, oldValue) => {
   // console.log(newValue);
   if (newValue == 'TODO') {
-    router.replace('/home/todo');
+    router.replace('/home/todo')
   } else if (newValue == 'DONE') {
-    router.replace('/home/done');
+    router.replace('/home/done')
   }
-});
-const clickHandle = (text) => {
-  btn.value = text;
-  radio1.value = text;
-};
+})
+// onBeforeMount(() => {
+//   computedTime()
+// })
+// onUpdated(() => {
+//   computedTime()
+// })
 </script>
+
+  
+
 <template>
   <div class="tab">
     <div class="drag">
       <span>作者: 阿飞五五开</span>
-      <span> 桌面便签 </span>
-      <span>傻鸟: 吴旗</span>
+      <span>桌面便签</span>
+      <span>{{nowTime}}</span>
     </div>
-    <div>
+    <div class="flex">
       <div class="flex">
         <button
-          :class="['noDarg', btn == 'TODO' ? 'clicked' : '']"
+          :class="['noDarg',overheadFlag?'':'btn', btn == 'TODO' ? 'clicked' : '']"
           @click="clickHandle('TODO')"
-        >
-          Todo
-        </button>
+        >Todo</button>
 
         <span style="color: #fff; display: inline-block">||</span>
 
         <button
-          :class="['noDarg', btn == 'DONE' ? 'clicked' : '']"
+          :class="['noDarg',overheadFlag?'':'btn', btn == 'DONE' ? 'clicked' : '']"
           @click="clickHandle('DONE')"
-        >
-          Done
-        </button>
+        >Done</button>
       </div>
-      <div></div>
+
+      <div class="flex" style="margin-top:15px;width:100px;color: rgb(136, 139, 143); ">
+        <button
+          style="fontSize:22px"
+          :class="['iconfont',overheadFlag?'icon-yincangbukejian':'btn icon-yincangbukejian']"
+          @click="minimize"
+        ></button>
+        <button
+          :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']"
+          @mouseenter="mouseenter"
+          @mouseleave="mouseleave"
+          @click="overhead"
+        ></button>
+      </div>
     </div>
   </div>
   <router-view></router-view>
 </template>
 <style scoped>
 .flex {
-  width: 200px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -67,7 +151,7 @@ const clickHandle = (text) => {
 .drag {
   position: relative;
   -webkit-app-region: drag;
-  background-color: rgb(243, 0, 0);
+  background-color: rgba(132, 143, 142, 0.322);
   color: azure;
   display: flex;
   justify-content: space-between;
@@ -81,5 +165,20 @@ span {
   font-size: 1.2em;
   /* color: aliceblue; */
   color: rgb(243, 243, 243);
+}
+
+.btn {
+  /* font-size: 20px; */
+}
+button {
+  padding: 0;
+}
+.btn:hover {
+  color: rgb(255, 255, 255);
+  cursor: pointer;
+}
+.overhead:hover {
+  /* color: rgb(136, 139, 143); */
+  cursor: pointer;
 }
 </style>

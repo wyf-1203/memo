@@ -16,7 +16,7 @@ li:hover {
   /* background-color: rgba(158, 157, 157, 0.4); */
 }
 button {
-  color: rgb(136, 139, 143);
+  color: rgb(180, 181, 184);
   display: inline-block;
   width: 100px;
   border-radius: 8px;
@@ -31,7 +31,7 @@ button {
 }
 button:hover {
   /* border-color: #646cff; */
-  color: aliceblue;
+  /* color: aliceblue; */
   /* color: rgb(29, 129, 218); */
 }
 button:focus,
@@ -50,4 +50,5 @@ body {
   padding: 0;
   /* height: 100%; */
   height: calc(100%) !important;
+  background-color: rgba(12, 12, 12, 0.705);
 }
