@@ -37,7 +37,7 @@ const createWindow = () => {
     },
     alwaysOnTop: false,
   });
-  win.webContents.openDevTools();
+  // win.webContents.openDevTools();
 
   if (app.isPackaged) {
     win.loadFile(path.join(__dirname, './dist/index.html'));
@@ -70,7 +70,25 @@ let tray = null;
 app.whenReady().then(() => {
   tray = new Tray(iconPath);
   const contextMenu = Menu.buildFromTemplate([
-    { label: '开机自启动', type: 'checkbox', checked: true },
+    {
+      label: '开机自启动',
+      type: 'checkbox',
+      checked: true,
+      click: () => {
+        // 点击事件：切换自启动
+        console.log(app.getLoginItemSettings().openAtLogin);
+        if (!app.isPackaged) {
+          app.setLoginItemSettings({
+            openAtLogin: !app.getLoginItemSettings().openAtLogin, //获取当前自启动状态
+            path: process.execPath,
+          });
+        } else {
+          app.setLoginItemSettings({
+            openAtLogin: !app.getLoginItemSettings().openAtLogin,
+          });
+        }
+      },
+    },
     { label: '预留1', type: 'checkbox' },
     { label: '预留2', type: 'checkbox', checked: true },
     {
@@ -82,6 +100,11 @@ app.whenReady().then(() => {
   ]);
   tray.setToolTip('桌面便签');
   tray.setContextMenu(contextMenu);
+  // 开机自启动
+  app.setLoginItemSettings({
+    openAtLogin: !app.getLoginItemSettings().openAtLogin, //获取当前自启动状态
+    path: process.execPath,
+  });
   createWindow();
 });
 app.commandLine.appendSwitch('wm-window-animations-disabled');
