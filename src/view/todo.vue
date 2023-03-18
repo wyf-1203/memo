@@ -88,6 +88,13 @@ const contentClick = () => {
         e.preventDefault()
         e.stopPropagation()
       })
+      input.addEventListener('keydown', (e) => {
+        console.log(e)
+        if (e.key == 'Enter') {
+          console.log('Enter')
+          input.blur()
+        }
+      })
       input.addEventListener('blur', () => {
         setTimeout(() => {
           if (rFlag) {
@@ -225,6 +232,13 @@ const clickLi = (e, item) => {
           rFlag = false
           input.focus()
           input.value = ''
+        }
+      })
+      input.addEventListener('keydown', (e) => {
+        console.log(e)
+        if (e.key == 'Enter') {
+          console.log('Enter')
+          input.blur()
         }
       })
       input.addEventListener('blur', () => {
