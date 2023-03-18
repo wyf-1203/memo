@@ -11,6 +11,7 @@
     "start": "nodemon --exec electron . --watch ./ --ext .js,.vue,.css,.html"
   },
   "dependencies": {
+    "electron-win-state": "^1.1.22",
     "element-plus": "^2.3.0",
     "pinia": "^2.0.33",
     "vue": "^3.2.45",

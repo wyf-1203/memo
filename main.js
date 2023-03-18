@@ -14,12 +14,18 @@ const iconPath = app.isPackaged
 //   'userData',
 //   'userData.json'
 // );
+const WinState = require('electron-win-state').default;
+const winState = new WinState({
+  defaultWidth: 400,
+  defaultHeight: 350,
+});
 
 const createWindow = () => {
   const win = new BrowserWindow({
     alwaysOnTop: false,
-    width: 400,
-    height: 350,
+    ...winState.winOptions,
+    // width: 400,
+    // height: 350,
     minWidth: 350,
     minHeight: 300,
     // frame: false,
@@ -46,24 +52,29 @@ const createWindow = () => {
   }
 
   ipcMain.handle('overhead', (e, flag) => {
-    console.log(flag);
+    // console.log(flag);
     win.setAlwaysOnTop(flag);
     // win.setIgnoreMouseEvents(flag, { forward: true });
   });
 
   ipcMain.handle('Ignore', (e, flag) => {
-    console.log(flag);
+    // console.log(flag);
     // win.setAlwaysOnTop(true);
     win.setIgnoreMouseEvents(flag, { forward: flag });
   });
 
   ipcMain.handle('minimize', () => {
-    console.log('minimize');
+    // console.log('minimize');
     // win.minimize();
     win.hide();
   });
   tray.on('click', () => {
     win.show();
+  });
+
+  win.on('ready-to-show', () => {
+    // win.show();
+    winState.manage(win);
   });
 };
 let tray = null;
@@ -76,7 +87,7 @@ app.whenReady().then(() => {
       checked: true,
       click: () => {
         // 点击事件：切换自启动
-        console.log(app.getLoginItemSettings().openAtLogin);
+        // console.log(app.getLoginItemSettings().openAtLogin);
         if (!app.isPackaged) {
           app.setLoginItemSettings({
             openAtLogin: !app.getLoginItemSettings().openAtLogin, //获取当前自启动状态
@@ -113,7 +124,7 @@ ipcMain.handle('loadData', async () => {
   const data = await fs.readFileSync(filePath, { encoding: 'utf-8' });
   // console.log(data);
   // console.log(app.isPackaged);
-  return data;
+  return { data, filePath };
 });
 
 ipcMain.handle('writeFile', async (e, arr) => {

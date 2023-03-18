@@ -1,20 +1,20 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const loadData = async () => {
-  let data = await ipcRenderer.invoke('loadData');
-  // console.log(data);
+  let { data, filePath } = await ipcRenderer.invoke('loadData');
+  // console.log(filePath);
   return data;
 };
 const writeFile = async (arr) => {
   ipcRenderer.invoke('writeFile', arr);
-  console.log(arr);
+  // console.log(arr);
 };
 const minimize = () => {
   ipcRenderer.invoke('minimize');
 };
 
 const overhead = (flag) => {
-  console.log(flag);
+  // console.log(flag);
   ipcRenderer.invoke('overhead', flag);
 };
 
