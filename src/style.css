@@ -29,7 +29,7 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
-button:hover {
+button:hover { 
   /* border-color: #646cff; */
   /* color: aliceblue; */
   /* color: rgb(29, 129, 218); */
@@ -40,15 +40,20 @@ button:focus-visible {
 }
 
 html,
-#app {
+#app,body {
+  margin: 0;
+  padding: 0;
   height: 100%;
   overflow-y: hidden;
 }
 
 body {
+  
   margin: 0;
   padding: 0;
   /* height: 100%; */
   height: calc(100%) !important;
   background-color: rgba(12, 12, 12, 0.705);
+  
 }
+ 

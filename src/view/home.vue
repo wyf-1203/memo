@@ -107,36 +107,39 @@
 
 
 <template>
-  <div class="tab">
-    <div class="drag">
-      <!-- <div style="-webkit-app-region: no-drag; z-index: 999; position: relative;width: 100%;height: 100%"> -->
-      <span> 桌面便签</span>
-      <span style="color: rgba(136, 139, 143, 0.342);">author: 阿飞</span>
-      <span> {{nowTime}}</span>
-      <!-- </div> -->
+  <div>
 
-    </div>
-    <div class="flex">
-      <div class="flex">
-        <button :class="['noDarg',overheadFlag?'':'btn', btn == 'TODO' ? 'clicked' : '']"
-          @click="clickHandle('TODO')">Todo</button>
+    <div class="tab">
+      <div class="drag">
+        <!-- <div style="-webkit-app-region: no-drag; z-index: 999; position: relative;width: 100%;height: 100%"> -->
+        <span> 桌面便签</span>
+        <span style="color: rgba(136, 139, 143, 0.342);">author: 阿飞</span>
+        <span> {{nowTime}}</span>
+        <!-- </div> -->
 
-        <span style="color: #fff; display: inline-block">||</span>
-
-        <button :class="['noDarg',overheadFlag?'':'btn', btn == 'DONE' ? 'clicked' : '']"
-          @click="clickHandle('DONE')">Done</button>
       </div>
+      <div class="flex">
+        <div class="flex">
+          <button :class="['noDarg',overheadFlag?'':'btn', btn == 'TODO' ? 'clicked' : '']"
+            @click="clickHandle('TODO')">Todo</button>
 
-      <div class="flex" style="margin-top:15px;width:100px;color: rgb(136, 139, 143); ">
-        <button style="fontSize:22px"
-          :class="['iconfont',overheadFlag?'icon-yincangbukejian':'btn icon-yincangbukejian']"
-          @click="minimize"></button>
-        <button :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']" @mouseenter="mouseenter"
-          @mouseleave="mouseleave" @click="overhead"></button>
+          <span style="color: #fff; display: inline-block">||</span>
+
+          <button :class="['noDarg',overheadFlag?'':'btn', btn == 'DONE' ? 'clicked' : '']"
+            @click="clickHandle('DONE')">Done</button>
+        </div>
+
+        <div class="flex" style="margin-top:15px;width:100px;color: rgb(136, 139, 143); ">
+          <button style="fontSize:22px"
+            :class="['iconfont',overheadFlag?'icon-yincangbukejian':'btn icon-yincangbukejian']"
+            @click="minimize"></button>
+          <button :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']" @mouseenter="mouseenter"
+            @mouseleave="mouseleave" @click="overhead"></button>
+        </div>
       </div>
     </div>
   </div>
-  <router-view></router-view>
+  <router-view style="overflow: hidden;"></router-view>
 </template>
 <style scoped>
   .flex {
@@ -146,6 +149,9 @@
   }
 
   .tab {
+    position: relative;
+    top: 0;
+    right: 0;
     /* user-select: none; */
   }
 

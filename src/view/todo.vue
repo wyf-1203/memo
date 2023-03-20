@@ -53,8 +53,11 @@
     }
   }
   const contentClick = () => {
+
     const content = document.querySelector('#content')
     content.addEventListener('click', (e) => {
+      const bar = document.querySelector('.tab')
+      console.dir(bar);
       let id = document.querySelector('#input')
       if (id) {
         // console.log(id);
@@ -382,6 +385,7 @@
   onMounted(() => { })
 </script>
 <template>
+
   <el-scrollbar ref="scrollbar" height="100%">
     <div id="content">
       <transition-group name="flip-list" tag="ul" class="items">
@@ -390,17 +394,18 @@
           @dblclick="dblclick($event, item)" style="width: 100%">
           <div style="
               width: 100%;
-              height: 100%;
+              height: 100%; 
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
-            ">{{ item.id + ' , ' + item.content }}</div>
+              ">{{ item.id + ' , ' + item.content }}</div>
         </li>
       </transition-group>
     </div>
   </el-scrollbar>
   <canvas width="100%" height="100%"
     style="position:fixed; left:0px; top:0px; z-index: 99999; pointer-events: none;"></canvas>
+
 </template>
 <style scoped>
   .flip-list-move {
@@ -409,7 +414,7 @@
 
   ::v-deep(#input) {
     height: 38px;
-    width: calc(100% - 50px);
+    width: calc(100% - 60px);
     border: none;
     font-size: 16px;
     margin: 0;
@@ -454,14 +459,18 @@
   }
 
   .el-scrollbar {
-    height: calc(100% - 30px);
+    height: calc(100% - 70px);
   }
 
   ::v-deep(.el-scrollbar__view) {
-    height: calc(100% - 30px) !important;
+    height: calc(8% - 70px) !important;
+
+
+
+
   }
 
   .items {
-    padding-bottom: 70px;
+    padding-bottom: 80px;
   }
 </style>

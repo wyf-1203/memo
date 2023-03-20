@@ -46,10 +46,12 @@ const createWindow = () => {
       nodeIntegration: true,
       // 预加载
       preload: path.resolve(__dirname, 'preload.js'),
+
     },
     alwaysOnTop: false,
   });
-  // win.webContents.openDevTools();
+  win.setSkipTaskbar(true)
+  win.webContents.openDevTools();
 
   if (app.isPackaged) {
     win.loadFile(path.join(__dirname, './dist/index.html'));
