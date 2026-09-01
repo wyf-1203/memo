@@ -64,6 +64,20 @@
     window.myApi.overhead(overheadFlag.value)
   }
 
+  // 锁定时: 鼠标移入锁图标 -> 取消穿透(可点解锁); 移出 -> 恢复穿透
+  const mouseenter = () => {
+    if (overheadFlag.value) {
+      window.myApi.Ignore(false)
+    }
+  }
+  const mouseleave = () => {
+    if (overheadFlag.value) {
+      window.myApi.Ignore(true)
+    } else {
+      window.myApi.Ignore(false)
+    }
+  }
+
   const clickHandle = (text) => {
     btn.value = text
     radio1.value = text
@@ -118,7 +132,8 @@
           <button style="fontSize:22px"
             :class="['iconfont',overheadFlag?'icon-yincangbukejian':'btn icon-yincangbukejian']"
             @click="minimize"></button>
-          <button :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']" @click="overhead"></button>
+          <button :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']"
+            @mouseenter="mouseenter" @mouseleave="mouseleave" @click="overhead"></button>
         </div>
       </div>
     </div>

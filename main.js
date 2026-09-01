@@ -28,7 +28,7 @@ let config = null
 
 const createWindow = () => {
   const win = new BrowserWindow({
-    alwaysOnTop: false,
+    alwaysOnTop: true,
     ...winState.winOptions,
     // width: 400,
     // height: 350,
@@ -48,7 +48,7 @@ const createWindow = () => {
       preload: path.resolve(__dirname, 'preload.js'),
 
     },
-    alwaysOnTop: false,
+    alwaysOnTop: true,
   });
   win.setSkipTaskbar(true)
   // win.webContents.openDevTools();
@@ -179,13 +179,12 @@ if (!gotTheLock) {
 }
 
 ipcMain.handle('overhead', (e, flag) => {
-
+  // 只置顶 - 可靠, 不会锁死(锁图标永远可点)
   win.setAlwaysOnTop(flag);
-  // win.setIgnoreMouseEvents(flag, { forward: true });
 });
 
 ipcMain.handle('Ignore', (e, flag) => {
-
+  // forward: 穿透时鼠标事件仍转发到窗口, 使 mouseenter/mouseleave 能触发(hover到锁图标即可解锁)
   win.setIgnoreMouseEvents(flag, { forward: flag });
 });
 
@@ -242,6 +241,3 @@ const writeConfig = async (data) => {
 }
 
 app.commandLine.appendSwitch('wm-window-animations-disabled');
-
-
-

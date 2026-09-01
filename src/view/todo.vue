@@ -164,16 +164,30 @@
     CursorSpecialEffects.handleMouseDown(e)
   }
 
+  // 当前正在编辑的项(全局状态)
+  let editingLi = null
+
   const clickLi = (e, item) => {
     e.stopPropagation()
     e.preventDefault()
     clearTimeout(clickTimer)
 
+    // 如果正在编辑其他项, 先提交它; 本次点击不进入编辑(需再点一次目标项)
+    const input = document.querySelector('#input')
+    if (input) {
+      const editingItem = editingLi
+      if (editingItem && editingItem !== item) {
+        input.blur() // 触发 blur -> commit
+        editingLi = null
+        return
+      }
+    }
+
     clickTimer = setTimeout(() => {
       let id = document.querySelector('#input')
 
       if (id) {
-        // console.log(id);
+        // 已经在编辑同一项, 忽略
         console.log('已经存在input')
       } else {
         let li = e.target
@@ -198,6 +212,7 @@
         e.target.parentNode.replaceChild(boxDiv, e.target)
         input.value = item.content
         input.focus()
+        editingLi = item
 
         let done = false
         const restoreLi = () => {
@@ -209,6 +224,7 @@
         const commit = () => {
           if (done) return
           done = true
+          editingLi = null
           let arrs = JSON.parse(JSON.stringify(arr.value)) //深拷贝
           let index = null
           let writeFlag = false
@@ -243,6 +259,7 @@
         const cancel = () => {
           if (done) return
           done = true
+          editingLi = null
           restoreLi()
         }
 
