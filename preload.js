@@ -6,8 +6,7 @@ const loadData = async () => {
   return data;
 };
 const writeFile = async (arr) => {
-  ipcRenderer.invoke('writeFile', arr);
-  // console.log(arr);
+  return ipcRenderer.invoke('writeFile', arr);
 };
 const minimize = () => {
   ipcRenderer.invoke('minimize');

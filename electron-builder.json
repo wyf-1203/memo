@@ -6,7 +6,6 @@
   ],
   "productName": "桌面便签",
   "directories": {
-    "buildResources": "assets",
     "output": "dist_electron"
   },
   "extraResources": [

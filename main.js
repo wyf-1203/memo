@@ -74,7 +74,12 @@ if (!gotTheLock) {
 } else {
   app.whenReady().then(async () => {
     tray = new Tray(iconPath);
-    config = await loadConfig()
+    try {
+      config = await loadConfig()
+    } catch (err) {
+      console.error('loadConfig error, using defaults:', err);
+      config = { AutoRunstart: false, item1: false, item2: false };
+    }
     console.log(config.AutoRunstart);
     app.setLoginItemSettings({
       openAtLogin: config.AutoRunstart, //获取当前自启动状态
@@ -189,33 +194,51 @@ ipcMain.handle('minimize', () => {
 });
 
 ipcMain.handle('loadData', async () => {
-  const data = await fs.readFileSync(filePath, { encoding: 'utf-8' });
-  // console.log(data);
-  // console.log(app.isPackaged);    
-  return { data, filePath };
+  try {
+    const data = fs.readFileSync(filePath, { encoding: 'utf-8' });
+    // console.log(data);
+    // console.log(app.isPackaged);    
+    return { data, filePath };
+  } catch (err) {
+    console.error('loadData error:', err);
+    // 返回默认空数据，避免渲染进程崩溃
+    return { data: JSON.stringify({ TODO: [], DONE: [] }), filePath };
+  }
 });
 
 ipcMain.handle('writeFile', async (e, arr) => {
-  // console.log(e);
-  let arrs = JSON.stringify(arr);
-  await fs.writeFileSync(filePath, arrs, (err) => {
-    console.log(err);
-  });
-  console.log(arrs);
+  try {
+    // console.log(e);
+    const arrs = JSON.stringify(arr);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, arrs, { encoding: 'utf-8' });
+    console.log(arrs);
+    return { ok: true };
+  } catch (err) {
+    console.error('writeFile error:', err);
+    return { ok: false, error: String(err) };
+  }
 });
 
 const loadConfig = async () => {
-  const data = await fs.readFileSync(configPath, { encoding: 'utf-8' });
-
-
+  const data = fs.readFileSync(configPath, { encoding: 'utf-8' });
   return JSON.parse(data)
 }
 const writeConfig = async (data) => {
-  const config = JSON.stringify(data)
-  console.log(config);
-  await fs.writeFileSync(configPath, config, (err) => {
-    console.log(err);
-  });
+  try {
+    const config = JSON.stringify(data)
+    console.log(config);
+    const dir = path.dirname(configPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(configPath, config, { encoding: 'utf-8' });
+  } catch (err) {
+    console.error('writeConfig error:', err);
+  }
 }
 
 app.commandLine.appendSwitch('wm-window-animations-disabled');

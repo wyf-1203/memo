@@ -63,21 +63,6 @@
     }
     window.myApi.overhead(overheadFlag.value)
   }
-  const dragend = () => {
-    console.log('dragend');
-  }
-  const mouseenter = () => {
-    if (overheadFlag.value) {
-      window.myApi.Ignore(false)
-    }
-  }
-  const mouseleave = () => {
-    if (overheadFlag.value) {
-      window.myApi.Ignore(true)
-    } else {
-      window.myApi.Ignore(false)
-    }
-  }
 
   const clickHandle = (text) => {
     btn.value = text
@@ -133,8 +118,7 @@
           <button style="fontSize:22px"
             :class="['iconfont',overheadFlag?'icon-yincangbukejian':'btn icon-yincangbukejian']"
             @click="minimize"></button>
-          <button :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']" @mouseenter="mouseenter"
-            @mouseleave="mouseleave" @click="overhead"></button>
+          <button :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']" @click="overhead"></button>
         </div>
       </div>
     </div>

@@ -53,108 +53,86 @@
     }
   }
   const contentClick = () => {
-
     const content = document.querySelector('#content')
-    content.addEventListener('click', (e) => {
-      const bar = document.querySelector('.tab')
-      console.dir(bar);
+    content.addEventListener('click', () => {
       let id = document.querySelector('#input')
       if (id) {
-        // console.log(id);
         console.log('已经存在input')
         return
-      } else {
-        const ul = document.querySelector('ul')
-        // console.log(ul);
-        let input = document.createElement('input')
-        let tfbox = document.createElement('div')
-        let boxDiv = document.createElement('div')
-        let trueDiv = document.createElement('div')
-        let falseDiv = document.createElement('div')
-        let rFlag = true
-
-        // iconfont icon-xxx
-        // falseDiv.innerHTML = 'X';
-        tfbox.appendChild(trueDiv)
-        tfbox.appendChild(falseDiv)
-        boxDiv.appendChild(input)
-        boxDiv.appendChild(tfbox)
-        boxDiv.classList.add('box')
-        tfbox.classList.add('float')
-        trueDiv.classList.add('flag', 'iconfont', 'icon-duigou')
-        falseDiv.classList.add('flag', 'iconfont', 'icon-guanbi')
-        input.setAttribute('id', 'input')
-        input.setAttribute('spellcheck', false)
-        ul.appendChild(boxDiv)
-        input.focus()
-        input.addEventListener('click', (e) => {
-          e.preventDefault()
-          e.stopPropagation()
-        })
-        input.addEventListener('keydown', (e) => {
-          console.log(e)
-          if (e.key == 'Enter') {
-            console.log('Enter')
-            input.blur()
-          }
-        })
-        input.addEventListener('blur', () => {
-          setTimeout(() => {
-            if (rFlag) {
-              console.log(e)
-              const ul = document.querySelector('ul')
-              const box = document.querySelector('.box')
-              add(input.value)
-              // setTimeout(() => {
-              ul.removeChild(box)
-              // }, 100);
-              rFlag = true
-            }
-          }, 200)
-        })
-        trueDiv.addEventListener('click', (e) => {
-          // console.log(e);
-          e.preventDefault()
-          e.stopPropagation()
-          // add(input.value);
-          const ul = document.querySelector('ul')
-          const box = document.querySelector('.box')
-          ul.removeChild(box)
-        })
-        falseDiv.addEventListener('click', (e) => {
-          console.log('false', e)
-          // e.preventDefault();
-          e.stopPropagation()
-          console.log(input.value)
-          if (input.value == '') {
-            rFlag = true
-            input.blur()
-          } else {
-            rFlag = false
-            input.focus()
-            input.value = ''
-          }
-        })
       }
+      const ul = document.querySelector('ul')
+      const input = document.createElement('input')
+      const tfbox = document.createElement('div')
+      const boxDiv = document.createElement('div')
+      const trueDiv = document.createElement('div')
+      const falseDiv = document.createElement('div')
+
+      tfbox.appendChild(trueDiv)
+      tfbox.appendChild(falseDiv)
+      boxDiv.appendChild(input)
+      boxDiv.appendChild(tfbox)
+      boxDiv.classList.add('box')
+      tfbox.classList.add('float')
+      trueDiv.classList.add('flag', 'iconfont', 'icon-duigou')
+      falseDiv.classList.add('flag', 'iconfont', 'icon-guanbi')
+      input.setAttribute('id', 'input')
+      input.setAttribute('spellcheck', false)
+      ul.appendChild(boxDiv)
+      input.focus()
+
+      let done = false
+      const commit = () => {
+        if (done) return
+        done = true
+        add(input.value)
+        const box = document.querySelector('.box')
+        if (box) ul.removeChild(box)
+      }
+      const cancel = () => {
+        if (done) return
+        done = true
+        const box = document.querySelector('.box')
+        if (box) ul.removeChild(box)
+      }
+
+      input.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      })
+      input.addEventListener('keydown', (e) => {
+        if (e.key == 'Enter') {
+          e.preventDefault()
+          commit()
+        }
+      })
+      input.addEventListener('blur', () => {
+        setTimeout(() => {
+          if (!done) commit()
+        }, 200)
+      })
+      trueDiv.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        commit()
+      })
+      falseDiv.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        cancel()
+      })
     })
   }
 
   const dblclick = (e, item) => {
     clearTimeout(clickTimer)
     let lookfor = false
-    let index1 = null
     let doneItem = null
     let arrs = JSON.parse(JSON.stringify(arr.value))
     let arrDone = JSON.parse(JSON.stringify(userData.value.DONE))
     let time = new Date().valueOf()
     let now = null
-    // console.log(userData);
-    // console.log(e.target);
-    arrs.forEach((i) => {
-      if (i.id == item.id) {
-        index1 = i.id - 1
-      }
-    })
+    const index1 = arrs.findIndex((i) => i.id == item.id)
+    if (index1 === -1) return
     doneItem = arrs.splice(index1, 1)[0]
     arrs.forEach((i, index) => {
       i.id = index + 1
@@ -192,7 +170,6 @@
     clearTimeout(clickTimer)
 
     clickTimer = setTimeout(() => {
-      let rFlag = true
       let id = document.querySelector('#input')
 
       if (id) {
@@ -208,8 +185,6 @@
         let trueDiv = document.createElement('div')
         let falseDiv = document.createElement('div')
 
-        // iconfont icon-xxx
-        // falseDiv.innerHTML = 'X';
         tfbox.appendChild(trueDiv)
         tfbox.appendChild(falseDiv)
         boxDiv.appendChild(input)
@@ -221,72 +196,79 @@
         input.setAttribute('id', 'input')
         input.setAttribute('spellcheck', false)
         e.target.parentNode.replaceChild(boxDiv, e.target)
-        // console.log(e.target.parentElement);
         input.value = item.content
         input.focus()
+
+        let done = false
+        const restoreLi = () => {
+          if (boxDiv.parentNode) {
+            boxDiv.parentNode.replaceChild(li, boxDiv)
+          }
+          parent.setAttribute('draggable', true)
+        }
+        const commit = () => {
+          if (done) return
+          done = true
+          let arrs = JSON.parse(JSON.stringify(arr.value)) //深拷贝
+          let index = null
+          let writeFlag = false
+          arrs.forEach((i, index1) => {
+            if (i.id == item.id) {
+              i.content = input.value
+              if (i.content == '') {
+                writeFlag = true
+                index = index1
+              } else {
+                if (arr.value[index1] && arr.value[index1].content !== i.content) {
+                  writeFlag = true
+                }
+              }
+            }
+          })
+          if (index != null) {
+            arrs.splice(index, 1)
+            arrs.forEach((i, index) => {
+              i.id = index + 1
+            })
+          }
+          if (writeFlag) {
+            writeFile(arrs)
+          }
+          arr.value = [...arrs]
+          setTimeout(() => {
+            //放到宏任务里会先更新 arr 再恢复 li 否则会闪动
+            restoreLi()
+          })
+        }
+        const cancel = () => {
+          if (done) return
+          done = true
+          restoreLi()
+        }
+
+        trueDiv.addEventListener('click', (e) => {
+          e.stopPropagation()
+          e.preventDefault()
+          commit()
+        })
         falseDiv.addEventListener('click', (e) => {
           e.stopPropagation()
           e.preventDefault()
-          console.log(e)
-          if (input.value == '') {
-            input.blur()
-            // rFlag = false;
-          } else {
-            rFlag = false
-            input.focus()
-            input.value = ''
-          }
+          cancel()
+        })
+        input.addEventListener('click', (e) => {
+          e.stopPropagation()
+          e.preventDefault()
         })
         input.addEventListener('keydown', (e) => {
-          console.log(e)
           if (e.key == 'Enter') {
-            console.log('Enter')
-            input.blur()
+            e.preventDefault()
+            commit()
           }
         })
         input.addEventListener('blur', () => {
           setTimeout(() => {
-            if (rFlag) {
-              let arrs = JSON.parse(JSON.stringify(arr.value)) //深拷贝
-              let index = null
-              let writeFlag = false
-              // console.log(arrs);
-              arrs.forEach((i, index1) => {
-                if (i.id == item.id) {
-                  i.content = input.value
-                  if (i.content == '') {
-                    writeFlag = true
-                    index = index1
-                  } else {
-                    // console.log(arr.value[index1]);
-                    if (arr.value[index1].content !== i.content) {
-                      // console.log('变了!');
-                      writeFlag = true
-                    }
-                  }
-                }
-              })
-              if (index != null) {
-                arrs.splice(index, 1)
-                arrs.forEach((i, index) => {
-                  i.id = index + 1
-                })
-              }
-              if (writeFlag) {
-                writeFile(arrs)
-              }
-
-              arr.value = [...arrs]
-              setTimeout(() => {
-                //放到宏任务里会先更新 arr 再取消li 否则会闪动
-                boxDiv.parentNode.replaceChild(li, boxDiv)
-              })
-              // window.myApi.writeFile(1);
-            } else {
-              rFlag = true
-              return
-            }
-            parent.setAttribute('draggable', true)
+            if (!done) commit()
           }, 200)
         })
       }

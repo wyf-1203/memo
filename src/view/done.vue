@@ -13,10 +13,9 @@
 
   const enter = (e, item) => {
     let handelItem = null;
-    let id = document.querySelector('#tfbox');
-    if (id) {
-      console.log('已经有tfbox了');
-      return;
+    let old = document.querySelector('#tfbox');
+    if (old && old.parentNode) {
+      old.parentNode.removeChild(old);
     }
     let tfbox = document.createElement('div');
     let resetDiv = document.createElement('div');
@@ -34,44 +33,42 @@
       let arrTodo = JSON.parse(JSON.stringify(userData.value.TODO));
       let arrDone = JSON.parse(JSON.stringify(userData.value.DONE));
       let index = 0;
-      for (let i of arrDone) {
-        for (let idone of i.contents) {
-          if (idone.date == item.date) {
-            handelItem = i.contents.splice(item.id - 1, 1)[0];
-            if (i.contents.length == 0) {
-              arrDone.splice(index, 1);
-            } else {
-              i.contents.forEach((element, eindex) => {
-                element.id = eindex + 1;
-              });
-            }
-            handelItem.id = arrTodo.length + 1;
-            arrTodo.push(handelItem);
-
-            updateData(arrTodo, arrDone);
-            return;
+      for (let i = 0; i < arrDone.length; i++) {
+        const group = arrDone[i];
+        const found = group.contents.findIndex((c) => c.date == item.date);
+        if (found !== -1) {
+          handelItem = group.contents.splice(found, 1)[0];
+          if (group.contents.length == 0) {
+            arrDone.splice(i, 1);
+          } else {
+            group.contents.forEach((element, eindex) => {
+              element.id = eindex + 1;
+            });
           }
+          handelItem.id = arrTodo.length + 1;
+          arrTodo.push(handelItem);
+
+          updateData(arrTodo, arrDone);
+          return;
         }
-        index++;
       }
     });
     deleteDiv.addEventListener('click', (e) => {
       let arrDone = JSON.parse(JSON.stringify(userData.value.DONE));
-      for (let i of arrDone) {
-        let index = 0;
-        for (let idone of i.contents) {
-          if (idone.date == item.date) {
-            handelItem = i.contents.splice(item.id - 1, 1)[0];
-            if (i.contents.length == 0) {
-              arrDone.splice(index, 1);
-            } else {
-              i.contents.forEach((element, eindex) => {
-                element.id = eindex + 1;
-              });
-            }
+      for (let i = 0; i < arrDone.length; i++) {
+        let group = arrDone[i];
+        let found = group.contents.findIndex((c) => c.date == item.date);
+        if (found !== -1) {
+          group.contents.splice(found, 1);
+          if (group.contents.length == 0) {
+            arrDone.splice(i, 1);
+          } else {
+            group.contents.forEach((element, eindex) => {
+              element.id = eindex + 1;
+            });
           }
+          break;
         }
-        index++;
       }
       console.log(item);
       writeFileDONE(arrDone);
@@ -79,7 +76,9 @@
   };
   const leave = (e, item) => {
     let id = document.querySelector('#tfbox');
-    e.target.removeChild(id);
+    if (id && id.parentNode === e.target) {
+      e.target.removeChild(id);
+    }
   };
   watch(userData, () => {
     console.log(userData.value);
