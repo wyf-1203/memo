@@ -1,1 +1,23 @@
-{"AutoRunstart":true,"item1":false,"item2":false}
+{
+  "_说明": {
+    "mentionPersonId": "可选：留空=自动取「当前登录人」自己(推荐)；若要同步特定某人，可填对方的ID。",
+    "userData": "可选：便签数据目录。留空=用默认(系统标准目录 %APPDATA%\\memo)，一般不用改。",
+    "apiKey": "",
+    "apiBaseUrl": "",
+    "apiModel": "",
+    "cdpPort": "可选：Chrome调试端口。默认9222，一般不用改。",
+    "syncIntervalMs": "可选：同步间隔(毫秒)。默认180000=3分钟。",
+    "targetName": "可选：被@人的名字(仅日志显示，留空用默认)。",
+    "docUrl": "可选：腾讯文档表格链接。填了之后，点设置里的「打开表格」会自动打开它并扫码登录；留空则手动打开。"
+  },
+  "AutoRunstart": false,
+  "item1": false,
+  "item2": false,
+  "mentionPersonId": "",
+  "cdpPort": 9222,
+  "syncIntervalMs": 180000,
+  "apiKey": "sk-NAzIZDYh2vYNIU8NGI8EcuLBm89Kh1uFTnCVB6xMfszqQtbO",
+  "apiBaseUrl": "http://10.213.196.114:3000/v1",
+  "apiModel": "deepseek-v4-flash",
+  "docUrl": ""
+}

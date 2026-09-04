@@ -17,6 +17,10 @@
   let dragItem = reactive({})
   let dragenterItem = reactive({})
   let arr = ref([])
+  let uidSeed = 1000
+  // 今日新增的条目内容集合(用于高亮显示)
+  const addedSet = reactive(new Set())
+  const updatedSet = reactive(new Set())  // 稳定唯一 key 生成: 拖拽/重排全程不变, 避免 :key 变化触发动画
 
   const timestampToTime = (timestamp) => {
     // 时间戳为10位需*1000，时间戳为13位不需乘1000
@@ -125,6 +129,9 @@
 
   const dblclick = (e, item) => {
     clearTimeout(clickTimer)
+    // 正在编辑任何条目(编辑框存在/编辑对象非空)时, 双击不触发"移入 DONE"。
+    // 只有退出编辑(提交/取消)后再双击, 才真正移入 DONE。
+    if (editingLi.value || document.querySelector('#input')) return
     let lookfor = false
     let doneItem = null
     let arrs = JSON.parse(JSON.stringify(arr.value))
@@ -165,7 +172,8 @@
   }
 
   // 当前正在编辑的项(全局状态)
-  let editingLi = null
+  // 响应式编辑锁：编辑中，列表完全禁用拖拽排序。
+  const editingLi = ref(null)
 
   const clickLi = (e, item) => {
     e.stopPropagation()
@@ -175,10 +183,10 @@
     // 如果正在编辑其他项, 先提交它; 本次点击不进入编辑(需再点一次目标项)
     const input = document.querySelector('#input')
     if (input) {
-      const editingItem = editingLi
+      const editingItem = editingLi.value
       if (editingItem && editingItem !== item) {
         input.blur() // 触发 blur -> commit
-        editingLi = null
+        editingLi.value = null
         return
       }
     }
@@ -209,10 +217,22 @@
         falseDiv.classList.add('flag', 'iconfont', 'icon-guanbi')
         input.setAttribute('id', 'input')
         input.setAttribute('spellcheck', false)
+        // 编辑框按原文本实际宽度展开；超出当前便签可用宽度时封顶，避免缩成小框。
+        const rowWidth = e.currentTarget && e.currentTarget.clientWidth ? e.currentTarget.clientWidth : parent.clientWidth
+        const canvas = document.createElement('canvas')
+        const context = canvas.getContext('2d')
+        const textStyle = window.getComputedStyle(e.target)
+        context.font = textStyle.font || (textStyle.fontSize + ' ' + textStyle.fontFamily)
+        const naturalWidth = Math.ceil(context.measureText(item.content || '').width) + 16
+        const controlsWidth = 56
+        const maxInputWidth = Math.max(120, rowWidth - controlsWidth - 14)
+        const inputWidth = Math.max(80, Math.min(naturalWidth, maxInputWidth))
+        boxDiv.style.width = (inputWidth + controlsWidth) + 'px'
+        input.style.width = inputWidth + 'px'
         e.target.parentNode.replaceChild(boxDiv, e.target)
         input.value = item.content
         input.focus()
-        editingLi = item
+        editingLi.value = item
 
         let done = false
         const restoreLi = () => {
@@ -224,7 +244,7 @@
         const commit = () => {
           if (done) return
           done = true
-          editingLi = null
+          editingLi.value = null
           let arrs = JSON.parse(JSON.stringify(arr.value)) //深拷贝
           let index = null
           let writeFlag = false
@@ -259,7 +279,7 @@
         const cancel = () => {
           if (done) return
           done = true
-          editingLi = null
+          editingLi.value = null
           restoreLi()
         }
 
@@ -293,25 +313,36 @@
   }
 
   const dragstart = (e, item) => {
+    if (editingLi.value) {
+      e.preventDefault()
+      return
+    }
     e.target.classList.add('drag1')
     dragItem.value = item
   }
 
   const liDragEnd = (e) => {
-    // console.log('------', e.target);
     e.target.classList.remove('drag1')
+    if (editingLi.value) {
+      dragItem.value = null
+      dragenterItem.value = null
+      return
+    }
+    const dragged = dragItem.value
+    const target = dragenterItem.value
+    dragItem.value = null
+    dragenterItem.value = null
+    // 松手时不重新赋值 arr.value —— 那会触发 flip-list 动画(松手瞬间再跳一次)。
+    // 顺序已在拖动过程中实时排好, 这里只把 id 原地更新(不换数组引用), 并把纯JSON副本写盘。
     let arrs = JSON.parse(JSON.stringify(arr.value))
-    arrs.forEach((i, index) => {
-      i.id = index + 1
-    })
+    arrs.forEach((i, idx) => { i.id = idx + 1 })
+    // 原地更新视图里的 id, 不替换数组 → 松手瞬间无动画
+    arr.value.forEach((i, idx) => { i.id = idx + 1 })
     writeFile(arrs)
-
-    arr.value = [...arrs]
   }
 
   const dragenter = (item) => {
-    // console.log(111);
-    // console.log(item);
+    if (editingLi.value) return
     dragenterItem.value = item
   }
 
@@ -319,63 +350,79 @@
     console.log(e)
   }
 
+  // 排序: dragstart 记录的是"对象引用", 用引用在当前数组定位(不用 id, 因 id 会被重排导致错位),
+  // 这样拖动滑过每个目标时实时移动(保持动画)且不会覆盖/重复。
+  // 排序: 保持对象引用不变, 只移动位置。用"引用"在当前 arr.value 定位(而非 id, 因 id 会变/重复)。
+  // 直接在同一数组上 splice 移动, 再整体赋值给 arr.value 触发 Vue 更新(flip-list 产生移动动画)。
   const sortArr = () => {
-    //拖拽后排序
-    // console.log('被点住拖拽的是' + dragItem.value.id);
-    // console.log('另一个是' + dragenterItem.value.id);
-    let index0 = ref(null)
-    let index1 = ref(null)
-    if (dragenterItem.value.id != dragItem.value.id && !sortArrFlag.value) {
-      sortArrFlag.value = true //防抖
-      setTimeout(() => {
-        sortArrFlag.value = false
-      }, 50) //防抖
-      arr.value.forEach((item, index) => {
-        if (
-          item.id == dragenterItem.value.id &&
-          dragenterItem.value.id != dragItem.value.id
-        ) {
-          index0.value = index
-        } else if (item.id == dragItem.value.id) {
-          index1.value = index
-        }
-      })
-      // console.log(index0, index1);
-
-      let arrs = JSON.parse(JSON.stringify(arr.value))
-      // console.log(arrs.);
-      // console.log('换位置了 --------');
-      arrs.splice(index1.value, 1)
-      arrs.splice(index0.value, 0, dragItem.value)
-
-      arr.value = [...arrs]
-    }
+    if (editingLi.value || sortArrFlag.value) return
+    const dragged = dragItem.value
+    const target = dragenterItem.value
+    if (!dragged || !target) return
+    if (dragged.id === target.id) return
+    const fromI = arr.value.findIndex(i => i === dragged)
+    const toI = arr.value.findIndex(i => i === target)
+    if (fromI === -1 || toI === -1 || fromI === toI) return
+    sortArrFlag.value = true
+    setTimeout(() => { sortArrFlag.value = false }, 40)
+    // 移动: 先删被拖对象, 再插到目标位置(同一数组, 引用不变)
+    const moved = arr.value.splice(fromI, 1)[0]
+    arr.value.splice(toI, 0, moved)
+    arr.value = [...arr.value]
+  }
+  // 填充今日新增集合(用于内容高亮)
+  const fillSyncState = (s) => {
+    addedSet.clear(); updatedSet.clear()
+    ;(s && s.addedContents || []).forEach(c => { if (c) addedSet.add(c) })
+    ;(s && s.updatedContents || []).forEach(c => { if (c) updatedSet.add(c) })
   }
   onMounted(() => {
     contentClick()
     loadData()
     if (userData.value.TODO) {
-      arr.value = [...userData.value.TODO]
+      arr.value = [...userData.value.TODO].map(i => {
+        if (!i._uid) { i._uid = ++uidSeed }
+        return i
+      })
+    }
+    // 订阅同步状态: 每次同步完成把"今日新增内容"填进 addedSet, 便签里高亮显示
+    if (window.myApi && window.myApi.onSyncStatus) {
+      window.myApi.onSyncStatus((s) => { if (s) fillSyncState(s) })
+    }
+    // 启动时主动获取一次最新同步状态
+    if (window.myApi && window.myApi.getLastSync) {
+      window.myApi.getLastSync().then((s) => { if (s) fillSyncState(s) }).catch(() => {})
     }
   })
-  watch(
-    userData,
-    () => {
-      arr.value = [...userData.value.TODO]
-      // console.log('123');
-
-      setTimeout(() => {
-        scrollbar.value.update()
-      }, 50)
-    },
-    { deep: true }
-  )
+  // 同步刷新防抖: 内容无实质变化则不重建 arr, 避免 transition-group 触发 flip-list 动画(闪一下)。
+  // 重建时按 id 匹配既有的 _uid(保持 :key 稳定), 避免 key 变化导致整列重新做滑动动画。
+  const syncArrFromStore = () => {
+    const newTodos = (userData.value && userData.value.TODO) || []
+    const old = arr.value || []
+    // 内容无变化(条数/每条 id/content/status 都相同) → 不重建, 不触发动画
+    const changed = old.length !== newTodos.length || newTodos.some((n, idx) => {
+      const o = old[idx]
+      if (!o) return true
+      return o.id !== n.id || o.content !== n.content || (o.status || '') !== (n.status || '')
+    })
+    if (!changed) return
+    // 按 id 逆推旧的 _uid, 保持列表渲染 key 稳定
+    const uidById = new Map()
+    old.forEach(i => { if (i && i.id !== undefined) uidById.set(i.id, i._uid) })
+    arr.value = newTodos.map(i => {
+      const u = uidById.get(i.id)
+      i._uid = u || ++uidSeed
+      return i
+    })
+    setTimeout(() => {
+      if (scrollbar.value) scrollbar.value.update()
+    }, 50)
+  }
+  watch(userData, () => { syncArrFromStore() }, { deep: true })
   watch(
     dragenterItem,
     () => {
       sortArr()
-
-      // console.log(arrs);
     },
     { deep: true }
   )
@@ -385,19 +432,17 @@
 </script>
 <template>
 
-  <el-scrollbar ref="scrollbar" height="100%">
+  <el-scrollbar ref="scrollbar" class="todo-scrollbar">
     <div id="content">
       <transition-group name="flip-list" tag="ul" class="items">
-        <li :key="item.date" v-for="item in arr" draggable="true" @dragstart="dragstart($event, item)"
+        <li :key="item._uid" v-for="item in arr" :draggable="!editingLi" :class="{'hl-new': addedSet.has(item.content), 'hl-update': updatedSet.has(item.content)}"
+          @dragstart="dragstart($event, item)"
           @dragenter="dragenter(item)" @dragend="liDragEnd($event, item)" @click="clickLi($event, item)"
           @dblclick="dblclick($event, item)" style="width: 100%">
-          <div style="
-              width: 100%;
-              height: 100%; 
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-              ">{{ item.id + ' , ' + item.content }}</div>
+          <div class="todo-line">
+            <span class="todo-text">{{ item.id + ' , ' + item.content }}</span>
+            <span v-if="item.status" :class="['status-tag', item.status === 'open' ? 'st-open' : 'st-pending']">{{ item.status === '待现场验证' ? '待验证' : item.status }}</span>
+          </div>
         </li>
       </transition-group>
     </div>
@@ -413,7 +458,8 @@
 
   ::v-deep(#input) {
     height: 38px;
-    width: calc(100% - 60px);
+    min-width: 0;
+    box-sizing: border-box;
     border: none;
     font-size: 16px;
     margin: 0;
@@ -425,14 +471,15 @@
 
   ::v-deep(.box) {
     position: relative;
+    display: flex;
+    align-items: center;
+    max-width: calc(100% - 8px);
+    height: 38px;
   }
 
   ::v-deep(.float) {
+    flex: 0 0 56px;
     height: 100%;
-    width: 50px;
-    position: absolute;
-    right: 20px;
-    top: 0;
     display: flex;
     justify-content: space-around;
     align-items: center;
@@ -457,19 +504,70 @@
     color: rgba(158, 157, 157) !important;
   }
 
-  .el-scrollbar {
-    height: calc(100% - 70px);
+  .todo-scrollbar {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
   }
-
-  ::v-deep(.el-scrollbar__view) {
-    height: calc(8% - 70px) !important;
-
-
-
-
+  ::v-deep(.todo-scrollbar .el-scrollbar__wrap) {
+    overflow-x: hidden;
   }
-
+  ::v-deep(.todo-scrollbar .el-scrollbar__view) {
+    min-height: 100%;
+    width: 100%;
+  }
+  /* 正文缩小时显示 ...；标签占自身宽度并紧跟省略后的正文。 */
+  .todo-line {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .todo-text {
+    display: block;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: calc(100% - 42px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .items {
-    padding-bottom: 80px;
+    padding-bottom: 12px;
+  }
+  .hl-new {
+    background: rgba(255, 165, 0, 0.28) !important;
+    color: #ffd54a !important;
+    border-left: 3px solid #ff9500;
+    text-shadow: 0 0 6px rgba(255, 165, 0, 0.6);
+  }
+  .hl-update {
+    background: rgba(120, 200, 255, 0.24) !important;
+    color: #8ee0ff !important;
+    border-left: 3px solid #4db8ff;
+    text-shadow: 0 0 6px rgba(77, 184, 255, 0.6);
+  }
+  /* 保持旧版截图的扁平文字标签：无胶囊背景、无边框。 */
+  .status-tag {
+    flex: 0 0 auto;
+    display: inline-block;
+    margin-left: 2px;
+    padding: 0;
+    font-size: 11px;
+    line-height: 38px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: transparent;
+    border: 0;
+  }
+  .st-pending {
+    color: #4da3ff;
+    text-shadow: 0 0 5px rgba(77, 163, 255, 0.5);
+  }
+  .st-open {
+    color: #ff6b6b;
+    text-shadow: 0 0 5px rgba(255, 107, 107, 0.6);
   }
 </style>

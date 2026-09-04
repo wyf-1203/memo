@@ -50,6 +50,14 @@ const useUserDataStore = defineStore('UserDataStore', {
       await window.myApi.writeFile(arrs);
       this.loadData();
     },
+    // 监听主进程同步完成事件(腾讯文档待办已写入 userData.json), 自动刷新
+    listenSync() {
+      if (window.myApi && window.myApi.onTodosSynced) {
+        window.myApi.onTodosSynced(() => {
+          this.loadData();
+        });
+      }
+    },
   },
 });
 

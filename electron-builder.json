@@ -16,6 +16,10 @@
     {
       "from": "./dist/configSetting",
       "to": "configSetting"
+    },
+    {
+      "from": "./dist/skill",
+      "to": "skill"
     }
   ],
   "nsis": {
