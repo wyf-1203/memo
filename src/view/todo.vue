@@ -217,17 +217,11 @@
         falseDiv.classList.add('flag', 'iconfont', 'icon-guanbi')
         input.setAttribute('id', 'input')
         input.setAttribute('spellcheck', false)
-        // 编辑框按原文本实际宽度展开；超出当前便签可用宽度时封顶，避免缩成小框。
+        // 编辑框始终按当前便签行的可用宽度展开，右侧固定预留确认/取消按钮。
         const rowWidth = e.currentTarget && e.currentTarget.clientWidth ? e.currentTarget.clientWidth : parent.clientWidth
-        const canvas = document.createElement('canvas')
-        const context = canvas.getContext('2d')
-        const textStyle = window.getComputedStyle(e.target)
-        context.font = textStyle.font || (textStyle.fontSize + ' ' + textStyle.fontFamily)
-        const naturalWidth = Math.ceil(context.measureText(item.content || '').width) + 16
         const controlsWidth = 56
-        const maxInputWidth = Math.max(120, rowWidth - controlsWidth - 14)
-        const inputWidth = Math.max(80, Math.min(naturalWidth, maxInputWidth))
-        boxDiv.style.width = (inputWidth + controlsWidth) + 'px'
+        const inputWidth = Math.max(120, rowWidth - controlsWidth - 14)
+        boxDiv.style.width = Math.max(176, rowWidth - 8) + 'px'
         input.style.width = inputWidth + 'px'
         e.target.parentNode.replaceChild(boxDiv, e.target)
         input.value = item.content
