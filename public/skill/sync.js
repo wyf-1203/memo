@@ -543,7 +543,20 @@ function mergeDone(existingDone, newTodoTopics, DONE_DIR) {
     console.log('发现 @'+TARGET_NAME+' 相关行: '+items.length);
     loadPullState();  // 加载上次拉取状态(用于时间对比)
     let todos = buildTodos(items);
-    if (API_KEY) { const aiTodos = await summarizeWithAI(todos); if (aiTodos) { todos = aiTodos; console.log('已用 AI 总结 '+todos.length+' 条待办(apiKey 模式)'); } else { console.log('AI 总结不可用(apiKey 无/失败), 退回规则提取'); } }
+    if (API_KEY) {
+      // 只把"本次有变更/新增"(isNew)的条目交给 AI 重新总结；没变的不请求、也不改变原本内容。
+      const need = todos.filter(t => t.isNew);
+      const aiTodos = need.length ? await summarizeWithAI(need) : null;
+      if (aiTodos) {
+        const byCt = new Map(aiTodos.map(t => [coreTopic(t.content), t]));
+        todos = todos.map(t => (t.isNew && byCt.has(coreTopic(t.content))) ? byCt.get(coreTopic(t.content)) : t);
+        console.log('已用 AI 总结 '+aiTodos.length+' 条待办(仅本次变更/新增, 其余保持原样)');
+      } else if (need.length) {
+        console.log('AI 总结不可用(apiKey 无/失败), 本次变更退回规则提取');
+      } else {
+        console.log('本次无变更/新增待办, 未调用 AI 总结');
+      }
+    }
     console.log('提炼待办(未完成): '+todos.length);
     todos.forEach(t => console.log('  - '+t.content));
     const doneTodos = buildDoneTodos(items);
