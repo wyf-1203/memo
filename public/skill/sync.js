@@ -308,31 +308,50 @@ async function summarizeWithAI(todos) {
     const m = t.content.match(/^\[([^\]]+)\]\s*(.*)$/);
     return (idx + 1) + '. [' + (m ? m[1] : '') + '] ' + (m ? m[2] : '');
   }).join('\n');
-  const sys = '你是需求整理助手。下面是一批腾讯文档里的需求待办，每行格式【[主题] 进展】。请把每一行整理成更清晰的一句话待办。要求：1) 每行只输出一条，开头保留【[主题]】且主题必须和输入完全一致；2) 方括号后写一句最通顺、聚焦最新状态或下一步的话；3) 不要编号、不要解释、不要多余文字、不要空行；4) 输出条数必须与输入完全相同、顺序一致。';
-  try {
+  const sys = '你是需求整理助手。请把下面每一条整理成更清晰的一句话待办。要求：1) 每条只输出一行，形如【[主题] 一句话】，方括号内的主题必须和输入完全一致；2) 方括号后写一句最通顺、聚焦最新状态或下一步的话；3) 不要编号、不要解释、不要多余文字、不要空行、不要用【】或引号额外包裹整行；4) 输出行数必须与输入完全相同、顺序一致。';
+  const MODEL = await resolveModel();
+  // 模型/网络可能不稳定(超时或把答案放进 reasoning)。最多重试 2 次, 任一次解析出 [主题] 即成功。
+  for (let attempt = 1; attempt <= 2; attempt++) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
-    const MODEL = await resolveModel();
-    const res = await fetch(API_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
-      body: JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: sys }, { role: 'user', content: input }], temperature: 0.2 }),
-      signal: ctrl.signal
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const j = await res.json();
-    const text = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || '').trim();
-    const lines = text.split(/\r?\n/).map(l => l.replace(/^\s*\d+[.、)）]\s*/, '').trim()).filter(Boolean);
-    if (lines.length !== todos.length) return null;
-    if (!lines.every(l => /^\[[^\]]+\]/.test(l))) return null;
-    return todos.map((t, idx) => {
-      const m = t.content.match(/^\[([^\]]+)\]\s*(.*)$/);
-      const origTopic = m ? m[1] : '';
-      const ai = lines[idx].match(/^\[[^\]]+\]\s*(.+)$/);
-      return '[' + origTopic + '] ' + (ai ? ai[1] : (m ? m[2] : ''));
-    });
-  } catch (e) { return null; }
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      const res = await fetch(API_BASE_URL + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+        body: JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: sys }, { role: 'user', content: input }], temperature: 0.2 }),
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const j = await res.json();
+      const msg = (j.choices && j.choices[0] && j.choices[0].message) || {};
+      // 兼容推理模型: content 为空时回退 reasoning_content(末尾通常含最终答案)。
+      const text = (msg.content || msg.reasoning_content || '').trim();
+      if (!text) { clearTimeout(timer); continue; }
+      // 解析: 去掉编号与可能的 【】「」包裹, 提取 [主题] 与后半句。按主题对齐。
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const aiByTopic = new Map();
+      for (const l of lines) {
+        let s = l.replace(/^\s*\d+\s*[.、)）:：]\s*/, '').trim();
+        s = s.replace(/^[【「『"']+/, '');
+        const m = s.match(/^[【「『"']?\s*\[([^\]]+)\]\s*[】」』"']?\s*(.*)$/);
+        if (!m) continue;
+        const topic = m[1].trim();
+        const restRaw = (m[2] || '').trim();
+        const rest = restRaw.replace(/[】」』"'】\s]+$/, '').trim();
+        if (topic && !aiByTopic.has(topic)) aiByTopic.set(topic, rest);
+      }
+      if (aiByTopic.size === 0) { clearTimeout(timer); continue; }
+      // 与原 todos 同结构(保留 source/newestDate/isNew), 只替换 content。
+      return todos.map((t) => {
+        const m = t.content.match(/^\[([^\]]+)\]\s*(.*)$/);
+        const origTopic = m ? m[1] : '';
+        const rest = aiByTopic.get(origTopic) || (m ? m[2] : '');
+        return Object.assign({}, t, { content: '[' + origTopic + '] ' + rest });
+      });
+    } catch (e) { clearTimeout(timer); /* 重试下一次 */ }
+  }
+  return null;
 }
 
 function buildTodos(items) {
