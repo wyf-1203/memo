@@ -22,6 +22,23 @@
   const addedSet = reactive(new Set())
   const updatedSet = reactive(new Set())  // 稳定唯一 key 生成: 拖拽/重排全程不变, 避免 :key 变化触发动画
 
+  const deadlineLevel = (value) => {
+    const text = String(value || '').trim()
+    const full = text.match(/(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})/)
+    const chinese = text.match(/(\d{1,2})月(\d{1,2})日/)
+    if (!full && !chinese) return ''
+    const now = new Date()
+    const year = full ? Number(full[1]) : now.getFullYear()
+    const month = full ? Number(full[2]) : Number(chinese[1])
+    const day = full ? Number(full[3]) : Number(chinese[2])
+    const deadline = new Date(year, month - 1, day)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const days = Math.round((deadline - today) / 86400000)
+    if (days <= 1) return 'dl-red'
+    if (days <= 2) return 'dl-yellow'
+    return 'dl-green'
+  }
+
   const timestampToTime = (timestamp) => {
     // 时间戳为10位需*1000，时间戳为13位不需乘1000
     // var date = new Date(timestamp * 1000);
@@ -434,8 +451,11 @@
           @dragenter="dragenter(item)" @dragend="liDragEnd($event, item)" @click="clickLi($event, item)"
           @dblclick="dblclick($event, item)" style="width: 100%">
           <div class="todo-line">
-            <span class="todo-text">{{ item.id + ' , ' + item.content }}</span>
+            <span class="desktop-index">{{ item.id }}，</span>
+            <span v-if="item.serial" class="status-tag st-serial">{{ item.serial }}</span>
+            <span class="todo-text">{{ item.content }}</span>
             <span v-if="item.status" :class="['status-tag', item.status === 'open' ? 'st-open' : 'st-pending']">{{ item.status === '待现场验证' ? '待验证' : item.status }}</span>
+            <span v-if="item.deadline" :class="['status-tag', 'deadline-tag', deadlineLevel(item.deadline)]">{{ item.deadline }}</span>
           </div>
         </li>
       </transition-group>
@@ -521,9 +541,11 @@
   }
   .todo-text {
     display: block;
+    /* 不占满剩余空间：正文末尾（或省略号）后立即跟状态/截止日期标签。 */
     flex: 0 1 auto;
     min-width: 0;
-    max-width: calc(100% - 42px);
+    /* 为序号、状态、截止日期预留空间，正文超长时只缩正文。 */
+    max-width: calc(100% - 118px);
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -563,5 +585,34 @@
   .st-open {
     color: #ff6b6b;
     text-shadow: 0 0 5px rgba(255, 107, 107, 0.6);
+  }
+  /* 表格序号：与状态相同的扁平标签风格，固定蓝色。 */
+  .desktop-index {
+    flex: 0 0 auto;
+    margin-right: 3px;
+    color: #fff;
+    white-space: nowrap;
+  }
+  .st-serial {
+    margin-left: 0;
+    margin-right: 4px;
+    color: #4da3ff;
+    text-shadow: 0 0 5px rgba(77, 163, 255, 0.5);
+  }
+  /* 客户要求解决时间：紧跟状态标签，按剩余自然日提示风险。 */
+  .deadline-tag {
+    margin-left: 5px;
+  }
+  .dl-green {
+    color: #65d989;
+    text-shadow: 0 0 5px rgba(101, 217, 137, 0.55);
+  }
+  .dl-yellow {
+    color: #ffd54a;
+    text-shadow: 0 0 5px rgba(255, 213, 74, 0.6);
+  }
+  .dl-red {
+    color: #ff6b6b;
+    text-shadow: 0 0 5px rgba(255, 107, 107, 0.65);
   }
 </style>

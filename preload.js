@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('myApi', {
   onTodosSynced: onTodosSynced,
   onSyncStatus: onSyncStatus,
   getLastSync: () => ipcRenderer.invoke('getLastSync'),
+  refreshTencentTodos: () => ipcRenderer.invoke('refreshTencentTodos'),
   openConfig: () => ipcRenderer.invoke('openConfig'),
   getConfig: () => ipcRenderer.invoke('getConfig'),
   saveConfig: (cfg) => ipcRenderer.invoke('saveConfig', cfg),

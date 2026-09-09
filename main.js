@@ -17,7 +17,10 @@ log('=== 便签启动 ===  exe=' + process.execPath + '  userData=' + app.getPat
 const iconPath = app.isPackaged
   ? path.resolve(__dirname, 'dist', 'memo.ico')
   : path.resolve(__dirname, 'public', 'memo.ico');
-const configPath = app.isPackaged
+// 配置随 Windows 用户保存，不跟随程序目录；更新/替换整个便签包也不会覆盖个人设置。
+const configPath = path.join(app.getPath('userData'), 'config.json');
+// 兼容旧版：首次迁移时从程序目录读取，之后只读写上面的 AppData 配置。
+const legacyConfigPath = app.isPackaged
   ? path.resolve(path.dirname(app.getPath('exe')), 'resources', 'configSetting', 'config.json')
   : path.resolve(__dirname, 'public', 'configSetting', 'config.json');
 // 腾讯文档待办同步脚本 (定时拉取) —— 打进 exe 资源(skill), 用相对路径定位, 便于多用户分发
@@ -41,6 +44,8 @@ let win = null
 let tray = null;
 let config = null
 let lastSyncResult = null; // 最近一次定时拉取结果 { time, added }
+let triggerSync = null; // app ready 后绑定，供“立即刷新”IPC 复用同一同步流程
+let syncInProgress = false;
 
 // 从 sync.js 写入的同一份状态文件恢复当天统计，避免重启或下一次无变化同步把“今日新增/更新”显示清零。
 function restoreTodaySyncResult() {
@@ -208,7 +213,9 @@ if (!gotTheLock) {
     // }, 2000)
 
     // ==== 定时拉取腾讯文档待办 (默认3分钟, 可配置) ====
-    const runSync = () => {
+    const runSync = (source = '定时') => {
+      if (syncInProgress) return { ok: false, busy: true, error: '正在同步，请稍候' };
+      syncInProgress = true;
       try {
         // 执行 sync.js, 同步等待输出
         // 从 config 读动态配置(被@人/端口), 数据/状态文件路径由运行时 app.getPath('userData') 计算
@@ -240,23 +247,23 @@ if (!gotTheLock) {
         if (mcU) updatedContents = mcU[1].split(';').map(x => x.trim()).filter(Boolean);
         const info = { time: Date.now(), added: added, updated: updated, addedContents: addedContents, updatedContents: updatedContents };
         lastSyncResult = info;
-        log('[sync] 定时拉取成功: 新增=' + added + ' 更新=' + updated + ' | ' + (out.split('\n').filter(Boolean).pop() || ''));
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('sync-status', info);
-        }
+        log('[sync] ' + source + '拉取成功: 新增=' + added + ' 更新=' + updated + ' | ' + (out.split('\n').filter(Boolean).pop() || ''));
+        if (win && !win.isDestroyed()) win.webContents.send('sync-status', info);
+        return { ok: true, ...info };
       } catch (err) {
-        log('[sync] 定时拉取失败: ' + (err.message || err));
-        // 临时连接失败不能抹掉当天已累计的新增/更新统计。
+        log('[sync] ' + source + '拉取失败: ' + (err.message || err));
         const savedToday = restoreTodaySyncResult();
         const previous = savedToday || lastSyncResult || { added: 0, updated: 0, addedContents: [], updatedContents: [] };
         lastSyncResult = { ...previous, time: Date.now(), error: String(err.message || err) };
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('sync-status', lastSyncResult);
-        }
+        if (win && !win.isDestroyed()) win.webContents.send('sync-status', lastSyncResult);
+        return { ok: false, ...lastSyncResult, error: String(err.message || err) };
+      } finally {
+        syncInProgress = false;
       }
     };
+    triggerSync = runSync;
     // 首次立即拉取, 然后按配置间隔定时
-    runSync();
+    runSync('启动');
     const syncInterval = (config && config.syncIntervalMs) || SYNC_DEFAULT_INTERVAL;
     log('[sync] 定时拉取已启动, 间隔=' + Math.round(syncInterval/1000) + '秒');
     setInterval(runSync, syncInterval);
@@ -389,6 +396,12 @@ ipcMain.handle('getLastSync', async () => {
   return lastSyncResult;
 });
 
+// 便签“刷新”按钮复用同一 runSync：完整读取腾讯表格、执行 AI 规则与统计刷新。
+ipcMain.handle('refreshTencentTodos', async () => {
+  if (!triggerSync) return { ok: false, error: '同步服务尚未初始化，请稍后重试' };
+  return triggerSync('手动');
+});
+
 ipcMain.handle('writeFile', async (e, arr) => {
   try {
     // console.log(e);
@@ -407,18 +420,29 @@ ipcMain.handle('writeFile', async (e, arr) => {
 });
 
 const loadConfig = async () => {
-  const data = fs.readFileSync(configPath, { encoding: 'utf-8' });
-  return JSON.parse(data)
+  // 新版优先读取 AppData；不存在时只迁移一次旧程序目录配置，避免用户更新后重新填写。
+  try {
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' }));
+    }
+    let migrated = {};
+    if (fs.existsSync(legacyConfigPath)) {
+      migrated = JSON.parse(fs.readFileSync(legacyConfigPath, { encoding: 'utf-8' }));
+      log('[config] 已从旧程序目录迁移配置到 ' + configPath);
+    }
+    await writeConfig(migrated);
+    return migrated;
+  } catch (err) {
+    log('[config] 读取/迁移失败: ' + (err.message || err));
+    return {};
+  }
 }
 const writeConfig = async (data) => {
   try {
-    const config = JSON.stringify(data)
-    console.log(config);
+    const serialized = JSON.stringify(data, null, 2)
     const dir = path.dirname(configPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(configPath, config, { encoding: 'utf-8' });
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configPath, serialized, { encoding: 'utf-8' });
   } catch (err) {
     console.error('writeConfig error:', err);
   }

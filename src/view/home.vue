@@ -23,6 +23,24 @@
   UserDataStore.listenSync()
   // 定时拉取状态: 上次同步时间 + 新增几条
   const syncStatus = ref(null) // { time, added }
+  const refreshing = ref(false)
+  const refreshNow = async () => {
+    if (refreshing.value || !window.myApi || !window.myApi.refreshTencentTodos) return
+    refreshing.value = true
+    try {
+      const result = await window.myApi.refreshTencentTodos()
+      if (result && result.ok) {
+        await loadData()
+        ElMessage.success('腾讯表格已刷新')
+      } else {
+        ElMessage.warning((result && result.error) || '正在同步，请稍候')
+      }
+    } catch (e) {
+      ElMessage.error('刷新失败')
+    } finally {
+      refreshing.value = false
+    }
+  }
   window.myApi.onSyncStatus((info) => {
     syncStatus.value = info
   })
@@ -205,13 +223,22 @@
           <button :class="['noDarg',overheadFlag?'':'btn', btn == 'DONE' ? 'clicked' : '']"
             @click="clickHandle('DONE')">Done</button>
         </div>
-        <div class="flex" style="margin-top:15px;width:100px;color: rgb(136, 139, 143); ">
-          <button style="fontSize:22px"
-            :class="['iconfont',overheadFlag?'icon-yincangbukejian':'btn icon-yincangbukejian']"
+        <div class="toolbar-actions">
+          <button class="btn toolbar-control refresh-toolbar-button" type="button" :disabled="refreshing"
+            @click="refreshNow">
+            <svg class="refresh-glyph" :class="{ spinning: refreshing }" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 12a8 8 0 0 1 13.4-5.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <path d="M17.4 2.8v4.8h-4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M20 12A8 8 0 0 1 6.6 17.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <path d="M6.6 21.2v-4.8h4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button class="btn toolbar-control" style="fontSize:22px"
+            :class="['iconfont',overheadFlag?'icon-yincangbukejian':'icon-yincangbukejian']"
             @click="minimize"></button>
-          <button :class="['btn','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']"
+          <button :class="['btn','toolbar-control','iconfont',overheadFlag?'icon-suoding':'icon-jiesuo']"
             @mouseenter="mouseenter" @mouseleave="mouseleave" @click="overhead"></button>
-          <button class="btn setbtn" title="设置" @click="openSetting"><Setting /></button>
+          <button class="btn toolbar-control setbtn" @click="openSetting"><Setting /></button>
         </div>
       </div>
     </div>
@@ -256,13 +283,63 @@
   </div>
 </template>
 <style scoped>
-.setbtn {
-  font-size: 20px;
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: 0 0 96px;
+  height: 28px;
+  margin-top: 12px;
+  padding-right: 4px;
+  box-sizing: border-box;
+}
+.toolbar-control {
+  width: 22px;
+  height: 24px;
+  flex: 0 0 22px;
+  padding: 0;
   color: rgb(136, 139, 143);
   cursor: pointer;
 }
-.setbtn:hover {
-  color: #409eff;
+.toolbar-control:hover:not(:disabled) {
+  color: rgb(255, 255, 255);
+}
+.setbtn {
+  font-size: 20px;
+}
+.refresh-toolbar-button {
+  width: 22px;
+  height: 24px;
+  margin-right: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgb(136, 139, 143);
+  font-size: 23px;
+  line-height: 24px;
+  overflow: hidden;
+}
+/* 使用固定 viewBox 的 SVG；旋转中心固定为图标自身中心 (12, 12)。 */
+.refresh-toolbar-button > .refresh-glyph {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 3px 2px;
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+}
+.refresh-toolbar-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.refresh-glyph.spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+@keyframes refresh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 .setbtn svg {
   width: 1em;

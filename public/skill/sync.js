@@ -32,6 +32,7 @@ const API_KEY = cfgRead('api-key', 'apiKey', '');
 const API_BASE_URL = cfgRead('api-base-url', 'apiBaseUrl', 'https://api.deepseek.com/v1');
 const API_MODEL = cfgRead('api-model', 'apiModel', 'deepseek-chat');  // 被@人的显示名(仅用于日志)
 const DRY_RUN = process.argv.includes('--dry-run');
+const SUMMARY_MAX_CHARS = 30; // 便签正文（[主题] 后的摘要）硬上限，绝不只依赖模型提示词。
 
 // ==== 持久化数据文件(唯一数据源): 放便签数据目录 ====
 const PERSIST_DATA = path.join(USER_DATA_DIR, 'userData.json');
@@ -147,33 +148,50 @@ function readExprStr(wfy) {
       if(cell.formattedValue && cell.formattedValue.value) return cell.formattedValue.value;
       return '';
     };
+    // 仅认富文本 mentionpersonId 精确匹配，不按姓名/普通文本或 JSON 片段误判。
     var hasWFYMention = function(cell){
-      if(!cell) return false;
-      if(cell.value && cell.value.r){
-        if(cell.value.r.some(function(seg){ return seg.mention && seg.mention.mentionpersonId===WFY; })) return true;
-      }
-      return JSON.stringify(cell).indexOf(WFY)>=0;
+      if(!cell || !cell.value || !cell.value.r) return false;
+      return cell.value.r.some(function(seg){ return seg.mention && seg.mention.mentionpersonId===WFY; });
     };
     // 第0行是表头。完整行数不受虚拟视口影响。
     var endRow = sheet.getRowCount ? sheet.getRowCount()-1 : 0;
+    // 三个 @ 人筛选列均按表头动态定位，兼容插列、换列、调整列顺序。
+    // 所有展示/筛选列均按表头动态定位，兼容插列、换列、调整列顺序。
+    var mentionCols = { serial: -1, progress: -1, owner: -1, modifier: -1, deadline: -1 };
+    for(var hc=0;hc<40;hc++){
+      try {
+        var header = cellText(sheet.getCellDataAtPosition(0,hc)).replace(/\s/g,'');
+        if(header === '序号' || header.indexOf('序号') >= 0) mentionCols.serial = hc;
+        else if(header === '进展情况' || header.indexOf('进展情况') >= 0) mentionCols.progress = hc;
+        else if(header === '当前责任人' || header.indexOf('当前责任人') >= 0) mentionCols.owner = hc;
+        else if(header === '修改人' || header.indexOf('修改人') >= 0) mentionCols.modifier = hc;
+        else if(header === '计划解决时间' || header.indexOf('计划解决时间') >= 0) mentionCols.deadline = hc;
+      } catch(e){}
+    }
     var rows = [];
     for(var r=1;r<=endRow;r++){
       try {
-        // 实际表列：c10=进展情况、c11=当前责任人（c0 是序号列）。
-        var c10 = sheet.getCellDataAtPosition(r,10);
-        var c11 = sheet.getCellDataAtPosition(r,11);
-        if(hasWFYMention(c11) || hasWFYMention(c10)){
+        var serialCell = mentionCols.serial >= 0 ? sheet.getCellDataAtPosition(r,mentionCols.serial) : null;
+        var progressCell = mentionCols.progress >= 0 ? sheet.getCellDataAtPosition(r,mentionCols.progress) : null;
+        var ownerCell = mentionCols.owner >= 0 ? sheet.getCellDataAtPosition(r,mentionCols.owner) : null;
+        var modifierCell = mentionCols.modifier >= 0 ? sheet.getCellDataAtPosition(r,mentionCols.modifier) : null;
+        var deadlineCell = mentionCols.deadline >= 0 ? sheet.getCellDataAtPosition(r,mentionCols.deadline) : null;
+        // 当前责任人、进展情况或修改人任一列真正 @ 到当前用户，就同步该行。
+        if(hasWFYMention(ownerCell) || hasWFYMention(progressCell) || hasWFYMention(modifierCell)){
           rows.push({
             row:r,
+            serial: cellText(serialCell).trim(),
+            deadline: cellText(deadlineCell).trim(),
             project: cellText(sheet.getCellDataAtPosition(r,1)),
             req: cellText(sheet.getCellDataAtPosition(r,2)),
             prio: cellText(sheet.getCellDataAtPosition(r,3)),
             status: cellText(sheet.getCellDataAtPosition(r,4)),
             type: cellText(sheet.getCellDataAtPosition(r,9)),
             phase: cellText(sheet.getCellDataAtPosition(r,7)),
-            progress: cellText(c10),
-            owner: cellText(c11),
-            c11At: hasWFYMention(c11), c10At: hasWFYMention(c10)
+            progress: cellText(progressCell),
+            owner: cellText(ownerCell),
+            modifier: cellText(modifierCell),
+            ownerAt: hasWFYMention(ownerCell), progressAt: hasWFYMention(progressCell), modifierAt: hasWFYMention(modifierCell)
           });
         }
       } catch(e){}
@@ -236,10 +254,25 @@ function latestProgress(item) {
   return newest.replace(/^\d{4}[:：]\s*/,'').trim();
 }
 
-// 提取主题: content 里的 "[xxx]" 或前10字
+// ==== AI 输出长度验收 ====
+// 仅在已配置 AI 时验证 AI 返回正文是否 <= SUMMARY_MAX_CHARS；不做本地截断。
+function summaryCharCount(text) {
+  return Array.from(String(text || '').replace(/\s/g, '')).length;
+}
+
+// 同步便签格式: "序号 [主题] 正文"；兼容旧版无序号的 "[主题] 正文"。
+function syncPrefix(item) {
+  const serial = String((item && item.serial) || '').trim();
+  return serial ? serial + ' ' : '';
+}
+function parseSyncContent(content) {
+  const m = String(content || '').match(/^(?:(\S+)\s+)?\[([^\]]+)\]\s*(.*)$/);
+  return m ? { serial: m[1] || '', topic: m[2].trim(), body: m[3] || '' } : null;
+}
+// 提取主题: content 里的 "序号 [xxx]" / "[xxx]"，或前10字。
 function topicOfContent(content) {
-  var m = content.match(/^\[([^\]]+)\]/);
-  return m ? m[1].trim() : (content || '').slice(0, 10);
+  const parsed = parseSyncContent(content);
+  return parsed ? parsed.topic : (content || '').slice(0, 10);
 }
 // 判断是否为"旧格式"的腾讯同步待办。
 // 只清理真正的旧格式: 嵌套方括号 [[...]]。绝不要用"含[已解决/待验证]等关键词"来判——那会误删清晰的 "[需求] 已修复，待现场验证" 这类合法的清晰待办。
@@ -248,7 +281,7 @@ function isLegacySynced(content) {
   return /^\[\[/.test(content);
 }
 
-// ==== 状态(时间对比): 记录上次拉取时每行的最新进展日期 ====
+// ==== 状态(内容指纹对比): 记录上次拉取时每行完整的可见数据 ====
 let pullState = {};
 function loadPullState() {
   try { pullState = JSON.parse(fs.readFileSync(PULL_STATE_FILE, 'utf-8')); } catch(e){ pullState = {}; }
@@ -257,12 +290,31 @@ function loadPullState() {
 function savePullState() {
   try { fs.writeFileSync(PULL_STATE_FILE, JSON.stringify(pullState), 'utf-8'); } catch(e){}
 }
-// 判断该行是否"新"(比上次拉取有更新进展, 或本次新出现的行)
+function normalizedForFingerprint(v) {
+  return String(v || '').replace(/\r\n/g, '\n').trim();
+}
+// 不能只比 MMDD 日期：同一天内改文字/责任人/状态时日期不变，旧逻辑会漏掉 AI 重总结。
+function rowFingerprint(item) {
+  return JSON.stringify({
+    req: normalizedForFingerprint(item.req),
+    progress: normalizedForFingerprint(item.progress),
+    status: normalizedForFingerprint(item.status),
+    owner: normalizedForFingerprint(item.owner),
+    modifier: normalizedForFingerprint(item.modifier),
+    phase: normalizedForFingerprint(item.phase),
+    type: normalizedForFingerprint(item.type)
+  });
+}
+// 判断本行是否新增或变更。兼容旧版 pull-state（旧版只保存 MMDD 日期），迁移后改用完整指纹。
 function isNewRow(item) {
-  if (!item || !item.newestDate) return false;
+  if (!item) return false;
   const prev = pullState[String(item.row)];
-  if (!prev) return true;                 // 上次没记录 → 新出现的行
-  return item.newestDate > prev;          // 日期更大 → 有更新进展
+  if (!prev) return true; // 上次没记录 → 新出现的行
+  if (typeof prev === 'object' && Object.prototype.hasOwnProperty.call(prev, 'fingerprint')) {
+    return prev.fingerprint !== rowFingerprint(item);
+  }
+  // 兼容旧版 date 字符串：首次升级不把全部历史条目当变更，仅沿用原有日期比较。
+  return !!item.newestDate && item.newestDate > String(prev);
 }
 
 // 提取该行最新进展日期(进展第一行 MMDD 前缀, 如 "0901")
@@ -305,12 +357,13 @@ async function resolveModel() {
 async function summarizeWithAI(todos) {
   if (!API_KEY) return null;
   const input = todos.map((t, idx) => {
-    const m = t.content.match(/^\[([^\]]+)\]\s*(.*)$/);
-    return (idx + 1) + '. [' + (m ? m[1] : '') + '] ' + (m ? m[2] : '');
+    const parsed = parseSyncContent(t.content);
+    return (idx + 1) + '. [' + (parsed ? parsed.topic : '') + '] ' + (parsed ? parsed.body : '');
   }).join('\n');
-  const sys = '你是需求整理助手。请把下面每一条整理成更清晰的一句话待办。要求：1) 每条只输出一行，形如【[主题] 一句话】，方括号内的主题必须和输入完全一致；2) 方括号后写一句最通顺、聚焦最新状态或下一步的话；3) 不要编号、不要解释、不要多余文字、不要空行、不要用【】或引号额外包裹整行；4) 输出行数必须与输入完全相同、顺序一致。';
+  const sys = '你是需求整理助手。请把下面每一条整理成更清晰的一句话待办。要求：1) 每条只输出一行，形如【[主题] 一句话】，方括号内的主题必须和输入完全一致；2) 方括号后写一句最通顺、聚焦最新状态或下一步的话，必须压缩在30个汉字/字符以内；3) 不要编号、不要解释、不要多余文字、不要空行、不要用【】或引号额外包裹整行；4) 输出行数必须与输入完全相同、顺序一致。';
+  const retrySys = '上一版答案有条目超过30字，不能采用。请重新压缩下面每条待办：每行仍为【[主题] 一句话】，主题必须完全一致；方括号后正文必须不超过26个汉字/字符，宁可省略细节也必须更短。不要编号、解释、空行或【】包裹。';
   const MODEL = await resolveModel();
-  // 模型/网络可能不稳定(超时或把答案放进 reasoning)。最多重试 2 次, 任一次解析出 [主题] 即成功。
+  // 第一次按 <=30 字生成；只要任一条超长/缺项，第二次以 <=26 字的更严格提示重写。
   for (let attempt = 1; attempt <= 2; attempt++) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
@@ -318,7 +371,7 @@ async function summarizeWithAI(todos) {
       const res = await fetch(API_BASE_URL + '/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
-        body: JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: sys }, { role: 'user', content: input }], temperature: 0.2 }),
+        body: JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: attempt === 1 ? sys : retrySys }, { role: 'user', content: input }], temperature: 0.2 }),
         signal: ctrl.signal
       });
       clearTimeout(timer);
@@ -342,13 +395,21 @@ async function summarizeWithAI(todos) {
         if (topic && !aiByTopic.has(topic)) aiByTopic.set(topic, rest);
       }
       if (aiByTopic.size === 0) { clearTimeout(timer); continue; }
-      // 与原 todos 同结构(保留 source/newestDate/isNew), 只替换 content。
-      return todos.map((t) => {
-        const m = t.content.match(/^\[([^\]]+)\]\s*(.*)$/);
-        const origTopic = m ? m[1] : '';
-        const rest = aiByTopic.get(origTopic) || (m ? m[2] : '');
-        return Object.assign({}, t, { content: '[' + origTopic + '] ' + rest });
-      });
+      // AI 模式硬验收：必须每条都返回、主题完全匹配、正文不超过 30 字；否则视为本次 AI 失败并重试。
+      const summarized = [];
+      let invalid = false;
+      for (const t of todos) {
+        const parsed = parseSyncContent(t.content);
+        const origTopic = parsed ? parsed.topic : '';
+        const rest = aiByTopic.get(origTopic);
+        if (!rest || summaryCharCount(rest) > SUMMARY_MAX_CHARS) { invalid = true; break; }
+        summarized.push(Object.assign({}, t, { content: '[' + origTopic + '] ' + rest }));
+      }
+      if (invalid) {
+        console.log('AI 输出缺项或超过'+SUMMARY_MAX_CHARS+'字，第'+attempt+'次结果不采用'+(attempt === 1 ? '，将按更严格的<=26字要求重试' : '，本次回退原文'));
+        continue;
+      }
+      return summarized;
     } catch (e) { clearTimeout(timer); /* 重试下一次 */ }
   }
   return null;
@@ -357,11 +418,13 @@ async function summarizeWithAI(todos) {
 function buildTodos(items) {
   return items.filter(it => !isDone(it)).map(it => {
     const nd = rowNewestDate(it);
+    const raw = Object.assign({}, it, { newestDate: nd });
     return {
       content: '[' + topicOf(it) + '] ' + (latestProgress(it) || '待处理'),
-      source: { row: it.row, project: it.project, status: it.status },
+      source: { row: it.row, serial: it.serial, deadline: it.deadline, project: it.project, status: it.status },
       newestDate: nd,
-      isNew: isNewRow(Object.assign({}, it, { newestDate: nd }))
+      fingerprint: rowFingerprint(raw),
+      isNew: isNewRow(raw)
     };
   });
 }
@@ -370,14 +433,28 @@ function buildTodos(items) {
 function buildDoneTodos(items) {
   return items.filter(it => isDone(it)).map(it => ({
     content: '[' + topicOf(it) + '] ' + (latestProgress(it) || '已关闭'),
-    source: { row: it.row, status: it.status }
+    source: { row: it.row, serial: it.serial, deadline: it.deadline, status: it.status }
   }));
 }
 
 // ==== 写入便签 ====
 // 判断是否为"腾讯同步待办"形如 "[需求] 进展"。用户自己加的条目(如"单击创建任务")不含 [..] 前缀, 会保留。
 function isSyncTodo(content) {
-  return /^\[[^\]]+\]/.test(content);
+  return !!parseSyncContent(content);
+}
+
+// 未变更的同步条目要保留上次已写入便签的 AI 文案，避免后续全量拉取又回退为规则提取文本。
+function existingSyncContentsByTopic() {
+  const byTopic = new Map();
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    for (const t of (data.TODO || [])) {
+      if (!isSyncTodo(t.content)) continue;
+      const ct = coreTopic(t.content);
+      if (ct && !byTopic.has(ct)) byTopic.set(ct, t.content);
+    }
+  } catch(e) {}
+  return byTopic;
 }
 
 // 收集 DONE 里用户已完成的同步主题, 避免 sync 把它们又写回 TODO。
@@ -415,12 +492,16 @@ function mergeIntoUserData(newTodos, doneTodos) {
   const unfinishedCoreTopics = new Set();  // sync 判定未完成的核心主题 → 从 DONE 剔除
   const newestByTopic = new Map();          // ct -> this pull's content (最新内容)
   const statusByTopic = new Map();            // ct -> status (本次拉取的状态, 用于便签显示)
+  const serialByTopic = new Map();            // ct -> 表格序号（独立蓝色标签）
+  const deadlineByTopic = new Map();          // ct -> 计划解决时间（独立截止标签）
   for (const nt of newTodos) {
     const ct = coreTopic(nt.content);
     if (!ct) continue;
     unfinishedCoreTopics.add(ct);
     newestByTopic.set(ct, nt.content);       // 用本次拉取的最新内容(进展可能更新)
     statusByTopic.set(ct, (nt.source && nt.source.status) || '');
+    serialByTopic.set(ct, (nt.source && nt.source.serial) || '');
+    deadlineByTopic.set(ct, (nt.source && nt.source.deadline) || '');
   }
 
   // 3. 现有 TODO 里的同步待办([..]): 表格里仍未完成 → 保留(内容若有更新则同步为最新); 已 close(不在newTodos) → 移除
@@ -435,7 +516,7 @@ function mergeIntoUserData(newTodos, doneTodos) {
     // 内容若更新了(进展变了)则覆盖成最新; 否则保留原 id/date
     const newContent = newestByTopic.get(ct);
     if (newContent && newContent !== t.content) updated++;  // 内容有变化 → 计为"更新"
-    keptSync.push({ id: t.id, date: t.date, content: newContent || t.content, status: statusByTopic.get(ct) || '' });
+    keptSync.push({ id: t.id, date: t.date, content: newContent || t.content, status: statusByTopic.get(ct) || '', serial: serialByTopic.get(ct) || '', deadline: deadlineByTopic.get(ct) || '' });
   }
 
   // 4. 真正新增的未完成需求(现有 TODO 里没有)
@@ -444,7 +525,7 @@ function mergeIntoUserData(newTodos, doneTodos) {
     const ct = coreTopic(nt.content);
     if (!ct || seenCore.has(ct)) continue;
     seenCore.add(ct);
-    toAdd.push({ id: 0, date: Date.now() + toAdd.length, content: nt.content, status: (nt.source && nt.source.status) || '' });
+    toAdd.push({ id: 0, date: Date.now() + toAdd.length, content: nt.content, status: (nt.source && nt.source.status) || '', serial: (nt.source && nt.source.serial) || '', deadline: (nt.source && nt.source.deadline) || '' });
   }
 
   // 5. 编号: 用户条目在前, 保留的同步待办, 新增在后
@@ -477,8 +558,8 @@ function mergeIntoUserData(newTodos, doneTodos) {
 // 提取唯一核心主题: 取 [..] 内完整标题(去空格/末尾标点), 作为去重整条目的唯一 key。
 // 不要用"冒号/逗号分割前段"——那会让 "ECC：平台..." 和 "ECC：动环..." 都退化成 "ECC", 造成 key 冲突误判。
 function coreTopic(content) {
-  var m = content.match(/^\[([^\]]+)\]/);
-  var s = m ? m[1] : content;
+  const parsed = parseSyncContent(content);
+  var s = parsed ? parsed.topic : content;
   s = s.replace(/\s+/g, '').replace(/[，、,：:；;。.！!？?]+$/g, '').trim();
   return s.slice(0, 40);
 }
@@ -541,21 +622,41 @@ function mergeDone(existingDone, newTodoTopics, DONE_DIR) {
     const items = res.value;
     if (!Array.isArray(items)) { console.log('ERROR: 返回非数组', JSON.stringify(items)); process.exit(1); }
     console.log('发现 @'+TARGET_NAME+' 相关行: '+items.length);
-    loadPullState();  // 加载上次拉取状态(用于时间对比)
+    loadPullState();  // 加载上次拉取状态(用于内容指纹 + 独立摘要缓存)
     let todos = buildTodos(items);
+    // 未变更条目优先使用 pull-state 的独立 summary，而不是依赖可能被 renderer 缓存回写的 userData.json。
+    const existingByTopic = existingSyncContentsByTopic();
+    todos = todos.map(t => {
+      const state = pullState[String(t.source.row)];
+      const stateSummary = state && typeof state === 'object' ? state.summary : '';
+      const saved = stateSummary || existingByTopic.get(coreTopic(t.content));
+      let content = (!t.isNew && saved) ? saved : t.content;
+      // 兼容旧版正文带序号：剥离序号，序号改由独立蓝色标签显示。
+      const savedParsed = parseSyncContent(content);
+      if (!t.isNew && savedParsed) {
+        content = '[' + savedParsed.topic + '] ' + savedParsed.body;
+      }
+      // 旧版状态没有 summary、或摘要曾被原文覆盖成 >30 字时：已配 AI 的用户只补偿压缩这类条目一次。
+      const parsed = parseSyncContent(content);
+      const needsAi = !!t.isNew || (!!API_KEY && summaryCharCount(parsed ? parsed.body : '') > SUMMARY_MAX_CHARS);
+      return Object.assign({}, t, { content: content, needsAi: needsAi });
+    });
     if (API_KEY) {
-      // 只把"本次有变更/新增"(isNew)的条目交给 AI 重新总结；没变的不请求、也不改变原本内容。
-      const need = todos.filter(t => t.isNew);
+      // 新增/变更，以及旧缓存中的长原文，才请求 AI；只有每条摘要都符合 <=30 字才采用。
+      const need = todos.filter(t => t.needsAi);
       const aiTodos = need.length ? await summarizeWithAI(need) : null;
       if (aiTodos) {
         const byCt = new Map(aiTodos.map(t => [coreTopic(t.content), t]));
-        todos = todos.map(t => (t.isNew && byCt.has(coreTopic(t.content))) ? byCt.get(coreTopic(t.content)) : t);
-        console.log('已用 AI 总结 '+aiTodos.length+' 条待办(仅本次变更/新增, 其余保持原样)');
+        todos = todos.map(t => (t.needsAi && byCt.has(coreTopic(t.content))) ? byCt.get(coreTopic(t.content)) : t);
+        console.log('已用 AI 总结 '+aiTodos.length+' 条待办(正文均<='+SUMMARY_MAX_CHARS+'字)');
       } else if (need.length) {
-        console.log('AI 总结不可用(apiKey 无/失败), 本次变更退回规则提取');
+        // AI 超长、少行、格式不对、超时或接口失败：直接保留本次原文。
+        console.log('AI 总结未通过长度/格式验收或请求失败，本次保留原文');
       } else {
-        console.log('本次无变更/新增待办, 未调用 AI 总结');
+        console.log('本次无变更/无长摘要待办, 未调用 AI 总结');
       }
+    } else {
+      console.log('未配置 AI，本次保留原文');
     }
     console.log('提炼待办(未完成): '+todos.length);
     todos.forEach(t => console.log('  - '+t.content));
@@ -578,9 +679,13 @@ function mergeDone(existingDone, newTodoTopics, DONE_DIR) {
     if (result.updatedContents.length) {
       console.log('今日更新内容: ' + result.updatedContents.join(';'));
     }
-    // 更新状态: 记录本次所有 @目标人 未完成行的最新进展日期, 供下次对比
+    // 更新状态: 保存日期、原始行指纹和最终展示摘要。未变更时从这里恢复，避免 userData 被 renderer 缓存回写后丢失摘要。
     if (!result.dry) {
-      todos.forEach(t => { if (t.newestDate) pullState[String(t.source.row)] = t.newestDate; });
+      todos.forEach(t => {
+        if (t.source && t.source.row != null) {
+          pullState[String(t.source.row)] = { date: t.newestDate || '', fingerprint: t.fingerprint || '', summary: t.content || '' };
+        }
+      });
       savePullState();
     }
     if (result.dry) {
